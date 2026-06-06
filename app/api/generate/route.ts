@@ -1,7 +1,7 @@
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: NextRequest) {
   const { topic, detailLevel = "detailed" } = await req.json();
@@ -53,13 +53,13 @@ Rules:
 - Make content genuinely educational and specific, not generic
 - Write at a university level`;
 
-  const message = await client.messages.create({
-    model: "claude-sonnet-4-6",
+  const message = await client.chat.completions.create({
+    model: "gpt-4o",
     max_tokens: 8000,
     messages: [{ role: "user", content: prompt }],
   });
 
-  const raw = (message.content[0] as { type: string; text: string }).text;
+  const raw = message.choices[0].message.content ?? "";
 
   let parsed;
   try {
