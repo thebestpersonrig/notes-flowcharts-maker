@@ -61,11 +61,14 @@ Rules:
 
   const raw = message.choices[0].message.content ?? "";
 
+  // Strip markdown code fences GPT-4o sometimes wraps around JSON
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch {
-    const match = raw.match(/\{[\s\S]*\}/);
+    const match = cleaned.match(/\{[\s\S]*\}/);
     if (!match) {
       return NextResponse.json(
         { error: "Failed to parse AI response" },

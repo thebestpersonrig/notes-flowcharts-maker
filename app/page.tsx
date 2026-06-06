@@ -182,7 +182,7 @@ export default function Home() {
                   />
                 </svg>
                 <span className="font-medium">
-                  Claude is researching and writing your notes...
+                  Generating your notes...
                 </span>
               </div>
               <p className="text-slate-500 text-sm mt-2">
