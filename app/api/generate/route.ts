@@ -56,26 +56,22 @@ Rules:
   const message = await client.chat.completions.create({
     model: "gpt-4o",
     max_tokens: 8000,
+    response_format: { type: "json_object" },
     messages: [{ role: "user", content: prompt }],
   });
 
   const raw = message.choices[0].message.content ?? "";
 
-  // Strip markdown code fences GPT-4o sometimes wraps around JSON
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
-
   let parsed;
   try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    if (!match) {
-      return NextResponse.json(
-        { error: "Failed to parse AI response" },
-        { status: 500 }
-      );
-    }
-    parsed = JSON.parse(match[0]);
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.error("JSON parse failed. finish_reason:", message.choices[0].finish_reason);
+    console.error("Raw output:", raw.slice(0, 500));
+    return NextResponse.json(
+      { error: "Failed to parse AI response: " + (err instanceof Error ? err.message : String(err)) },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json(parsed);
