@@ -1,7 +1,7 @@
-import OpenAI from "openai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,21 +54,19 @@ Rules:
 - Make content genuinely educational and specific, not generic
 - Write at a university level`;
 
-  const message = await client.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 8000,
-    response_format: { type: "json_object" },
-    messages: [{ role: "user", content: prompt }],
+  const model = client.getGenerativeModel({
+    model: "gemini-1.5-flash",
+    generationConfig: { responseMimeType: "application/json" },
   });
 
-  const raw = message.choices[0].message.content ?? "";
+  const result = await model.generateContent(prompt);
+  const raw = result.response.text();
 
   let parsed;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    console.error("JSON parse failed. finish_reason:", message.choices[0].finish_reason);
-    console.error("Raw output:", raw.slice(0, 500));
+    console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
     return NextResponse.json(
       { error: "Failed to parse AI response: " + (err instanceof Error ? err.message : String(err)) },
       { status: 500 }
