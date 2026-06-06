@@ -1,10 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-
 export async function POST(req: NextRequest) {
   try {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json({ error: "GEMINI_API_KEY is not set in .env.local" }, { status: 500 });
+  }
+  const client = new GoogleGenAI({ apiKey });
+
   const { topic, detailLevel = "detailed" } = await req.json();
 
   if (!topic?.trim()) {
