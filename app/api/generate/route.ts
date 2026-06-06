@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req: NextRequest) {
+  try {
   const { topic, detailLevel = "detailed" } = await req.json();
 
   if (!topic?.trim()) {
@@ -75,4 +76,10 @@ Rules:
   }
 
   return NextResponse.json(parsed);
+
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Generate route error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }

@@ -46,8 +46,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ topic: topic.trim(), detailLevel }),
       });
-      if (!res.ok) throw new Error((await res.json()).error || "Generation failed");
       const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data);
       setActiveSection(0);
     } catch (err) {
