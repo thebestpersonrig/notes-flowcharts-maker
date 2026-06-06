@@ -1,7 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenAI } from "@google/genai";
 import { NextRequest, NextResponse } from "next/server";
 
-const client = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+const client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
@@ -54,13 +54,13 @@ Rules:
 - Make content genuinely educational and specific, not generic
 - Write at a university level`;
 
-  const model = client.getGenerativeModel({
-    model: "gemini-1.5-flash",
-    generationConfig: { responseMimeType: "application/json" },
+  const result = await client.models.generateContent({
+    model: "gemini-2.0-flash",
+    contents: prompt,
+    config: { responseMimeType: "application/json" },
   });
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text();
+  const raw = result.text ?? "";
 
   let parsed;
   try {
