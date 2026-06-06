@@ -59,7 +59,7 @@ Rules:
 - Write at a university level`;
 
   const result = await client.models.generateContent({
-    model: "gemini-1.5-flash",
+    model: "gemini-2.0-flash-lite",
     contents: prompt,
     config: { responseMimeType: "application/json" },
   });
