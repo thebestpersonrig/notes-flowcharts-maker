@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, detailLevel = "detailed" } = await req.json();
+    const { topic, detailLevel = "detailed", grade } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -25,9 +25,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = `You are an expert educator and technical writer. Create comprehensive, university-level notes on: "${topic}".
+    // Build grade-aware instructions
+    let gradeInstruction = "";
+    if (grade) {
+      const gradeLabel = grade === "college" ? "college/university" : `grade ${grade}`;
+      gradeInstruction = `
+CRITICAL — GRADE ADAPTATION:
+The student is in ${gradeLabel}. You MUST adapt ALL explanations to their level:
+- Use vocabulary and sentence complexity appropriate for a ${gradeLabel} student.
+- If this topic is normally taught at a HIGHER grade level, break it down using simpler concepts they already know. Build up from fundamentals. Use step-by-step reasoning. Don't assume prerequisite knowledge they haven't learned yet.
+- If this topic is normally taught at a LOWER grade level, you can be more concise and add deeper insights, connections to advanced topics, and nuance.
+- Analogies should reference things a ${gradeLabel} student would relate to (school life, everyday experiences, pop culture).
+- Practice problems should be solvable at the ${gradeLabel} level.
+- For math/science: show worked-out steps appropriate for their level. Don't skip steps they wouldn't understand.
+`;
+    }
 
-Detail level: ${detailLevel} (brief = overview, detailed = full depth, expert = advanced nuance)
+    const detailMap: Record<string, string> = {
+      summary: "summary = short, concise overview hitting only the most important points. 2-3 sections max, shorter content, fewer subsections. Think quick study reference card.",
+      brief: "brief = moderate overview covering main ideas with some depth",
+      detailed: "detailed = full, comprehensive depth with thorough explanations",
+      expert: "expert = advanced nuance, edge cases, deeper analysis for someone who wants mastery",
+    };
+
+    const prompt = `You are an expert educator and technical writer. Create comprehensive notes on: "${topic}".
+
+Detail level: ${detailMap[detailLevel] || detailMap.detailed}
+${gradeInstruction}
 
 Return ONLY valid JSON (no markdown, no code fences):
 {
@@ -77,20 +101,22 @@ Return ONLY valid JSON (no markdown, no code fences):
 }
 
 CRITICAL RULES:
-- 4-7 sections, each with: 3+ key_points, 1-2 specific examples, 1-3 subsections, a tldr, difficulty level, connections
+- For "summary" detail level: 2-3 sections, 2-3 key_points each, 1 example each, 0-1 subsections. Keep everything short and punchy.
+- For other levels: 4-7 sections, each with: 3+ key_points, 1-2 specific examples, 1-3 subsections, a tldr, difficulty level, connections
 - 3-5 common_misconceptions with detailed reality corrections
 - 3-5 analogies using everyday objects/experiences
 - pros_cons: set applicable=true ONLY if the topic genuinely involves choices, tradeoffs, or competing approaches. Leave false for pure knowledge topics.
 - timeline: set applicable=true ONLY if the topic has meaningful historical development. Leave false for abstract/technical concepts.
 - process_flow: set applicable=true ONLY if the topic involves a clear sequential process or workflow. Leave false for descriptive/conceptual topics.
 - 3-5 practice_problems that test understanding, not just recall
-- 8-12 key_terms
+- 8-12 key_terms (5-8 for summary)
 - Make examples SPECIFIC (real companies, real events, real numbers), not generic
-- Content must be genuinely educational and accurate`;
+- Content must be genuinely educational and accurate
+- If a grade level is specified, EVERY piece of content must be understandable by that grade level. This is the #1 priority.`;
 
     const message = await client.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: 8000,
+      max_tokens: detailLevel === "summary" ? 4000 : 8000,
       messages: [{ role: "user", content: prompt }],
     });
 

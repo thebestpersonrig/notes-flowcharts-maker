@@ -38,7 +38,7 @@ interface NotesContent {
 
 interface HistoryItem { id: string; title: string; date: string; notes: NotesContent }
 
-type DetailLevel = "brief" | "detailed" | "expert";
+type DetailLevel = "summary" | "brief" | "detailed" | "expert";
 
 const DIFF_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   beginner:     { bg: "bg-green-100 dark:bg-green-500/20", text: "text-green-700 dark:text-green-300", label: "Beginner" },
@@ -50,6 +50,7 @@ const DIFF_COLORS: Record<string, { bg: string; text: string; label: string }> =
 
 export default function Home() {
   const [topics, setTopics] = useState<string[]>([""]);
+  const [grade, setGrade] = useState("");
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("detailed");
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<NotesContent | null>(null);
@@ -123,7 +124,7 @@ export default function Home() {
     if (!combined) return;
     setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set());
     try {
-      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, detailLevel }) });
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, detailLevel, grade: grade || undefined }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
@@ -253,8 +254,17 @@ export default function Home() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add topic
               </button>
               <div className="flex-1" />
-              <div className="flex gap-2">
-                {(["brief", "detailed", "expert"] as DetailLevel[]).map(lvl => (
+              {/* Grade selector */}
+              <select value={grade} onChange={e => setGrade(e.target.value)} disabled={loading} className="bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/20 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-400 transition appearance-none cursor-pointer" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center", paddingRight: "30px" }}>
+                <option value="">Grade (optional)</option>
+                {Array.from({ length: 8 }, (_, i) => i + 5).map(g => <option key={g} value={String(g)}>Grade {g}</option>)}
+                <option value="11">Grade 11</option>
+                <option value="12">Grade 12</option>
+                <option value="college">College</option>
+              </select>
+              {/* Detail level */}
+              <div className="flex gap-1.5">
+                {(["summary", "brief", "detailed", "expert"] as DetailLevel[]).map(lvl => (
                   <button key={lvl} type="button" onClick={() => setDetailLevel(lvl)} className={`px-3 py-2.5 rounded-xl text-sm font-medium capitalize transition ${detailLevel === lvl ? "bg-blue-600 dark:bg-blue-500 text-white" : "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/20"}`}>{lvl}</button>
                 ))}
               </div>
