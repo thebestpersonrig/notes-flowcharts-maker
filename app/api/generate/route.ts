@@ -1,13 +1,17 @@
-import { GoogleGenAI } from "@google/genai";
+import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   try {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) {
-    return NextResponse.json({ error: "GEMINI_API_KEY is not set in .env.local" }, { status: 500 });
+    return NextResponse.json({ error: "OPENROUTER_API_KEY is not set" }, { status: 500 });
   }
-  const client = new GoogleGenAI({ apiKey });
+
+  const client = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey,
+  });
 
   const { topic, detailLevel = "detailed" } = await req.json();
 
@@ -19,7 +23,7 @@ export async function POST(req: NextRequest) {
 
 Detail level: ${detailLevel} (brief = overview only, detailed = full depth, expert = advanced nuance included)
 
-Return ONLY valid JSON matching this exact schema (no markdown, no extra text):
+Return ONLY valid JSON matching this exact schema (no markdown, no extra text, no code fences):
 {
   "title": "Descriptive title for the notes",
   "overview": "2-3 paragraph rich overview of the topic",
@@ -58,17 +62,20 @@ Rules:
 - Make content genuinely educational and specific, not generic
 - Write at a university level`;
 
-  const result = await client.models.generateContent({
-    model: "gemini-2.5-flash",
-    contents: prompt,
-    config: { responseMimeType: "application/json" },
+  const message = await client.chat.completions.create({
+    model: "deepseek/deepseek-chat-v3-0324:free",
+    max_tokens: 8000,
+    messages: [{ role: "user", content: prompt }],
   });
 
-  const raw = result.text ?? "";
+  const raw = message.choices[0].message.content ?? "";
+
+  // Strip markdown code fences if present
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(cleaned);
   } catch (err) {
     console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
     return NextResponse.json(
