@@ -44,15 +44,7 @@ type DetailLevel = "brief" | "detailed" | "expert";
 
 // ─── Loading messages ────────────────────────────────────────────────────────
 
-const LOADING_MESSAGES = [
-  "Understanding your topic...",
-  "Researching key concepts...",
-  "Structuring your notes...",
-  "Writing detailed sections...",
-  "Building the flowchart...",
-  "Compiling key terms...",
-  "Finalizing your notes...",
-];
+// (no fake loading messages)
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
@@ -64,7 +56,6 @@ export default function Home() {
   const [notes, setNotes] = useState<NotesContent | null>(null);
   const [error, setError] = useState("");
   const [activeSection, setActiveSection] = useState(0);
-  const [loadingMsg, setLoadingMsg] = useState(0);
 
   // Feature state
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -76,6 +67,7 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [activeTab, setActiveTab] = useState<"notes" | "flowchart" | "quiz">("notes");
+  const [elapsed, setElapsed] = useState(0);
 
   // ─── Theme ─────────────────────────────────────────────────────────────────
 
@@ -168,14 +160,12 @@ export default function Home() {
 
   useEffect(() => {
     if (!loading) {
-      setLoadingMsg(0);
+      setElapsed(0);
       return;
     }
     const interval = setInterval(() => {
-      setLoadingMsg((prev) =>
-        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
-      );
-    }, 4000);
+      setElapsed((prev) => prev + 1);
+    }, 1000);
     return () => clearInterval(interval);
   }, [loading]);
 
@@ -690,17 +680,11 @@ export default function Home() {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                <span className="font-medium">{LOADING_MESSAGES[loadingMsg]}</span>
+                <span className="font-medium">Generating your notes...</span>
               </div>
-              {/* Progress bar */}
-              <div className="mt-4 mx-auto max-w-xs h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-[4000ms] ease-linear"
-                  style={{
-                    width: `${Math.min(((loadingMsg + 1) / LOADING_MESSAGES.length) * 95 + 5, 95)}%`,
-                  }}
-                />
-              </div>
+              <p className="text-slate-400 dark:text-slate-500 text-sm mt-2 tabular-nums">
+                {elapsed}s elapsed
+              </p>
             </div>
             {[1, 2, 3].map((i) => (
               <div
