@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, detailLevel = "detailed", grade } = await req.json();
+    const { topic, detailLevel = "detailed", grade, template = "study" } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -41,6 +41,15 @@ The student is in ${gradeLabel}. You MUST adapt ALL explanations to their level:
 `;
     }
 
+    // Template-specific tone adjustments
+    const templateTone: Record<string, string> = {
+      study: "",
+      cheatsheet: "\nTEMPLATE: EXAM CHEAT SHEET\nWrite in a quick-reference style. Use bullet points, short phrases, and mnemonic devices. Focus on facts, formulas, and definitions that are likely to appear on an exam. Skip lengthy explanations — prioritize density of information.",
+      research: "\nTEMPLATE: ESSAY RESEARCH\nWrite in an analytical, academic tone. Include thesis-worthy arguments, counterpoints, evidence, and citations-style references. Focus on analysis, not just description. Each section should present a line of reasoning.",
+      revision: "\nTEMPLATE: QUICK REVISION\nWrite for a student reviewing the night before. Hit the essentials fast. Use simple language, clear formatting, and highlight what's most likely to be tested. Include memory tricks.",
+      deepdive: "\nTEMPLATE: DEEP DIVE\nGo beyond surface-level. Explore edge cases, historical context, competing theories, and nuanced details. Assume the reader already knows the basics and wants mastery.",
+    };
+
     const detailMap: Record<string, string> = {
       summary: "summary = short, concise overview hitting only the most important points. 2-3 sections max, shorter content, fewer subsections. Think quick study reference card.",
       brief: "brief = moderate overview covering main ideas with some depth",
@@ -51,6 +60,7 @@ The student is in ${gradeLabel}. You MUST adapt ALL explanations to their level:
     const prompt = `You are an expert educator and technical writer. Create comprehensive notes on: "${topic}".
 
 Detail level: ${detailMap[detailLevel] || detailMap.detailed}
+${templateTone[template] || ""}
 ${gradeInstruction}
 
 Return ONLY valid JSON (no markdown, no code fences):

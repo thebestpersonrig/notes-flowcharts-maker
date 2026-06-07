@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 
 const Flowchart = dynamic(() => import("./components/Flowchart"), { ssr: false });
@@ -38,6 +38,7 @@ interface NotesContent {
 }
 
 interface HistoryItem { id: string; title: string; date: string; notes: NotesContent }
+interface ChatMessage { role: "user" | "assistant"; content: string }
 
 type DetailLevel = "summary" | "brief" | "detailed" | "expert";
 
@@ -47,12 +48,25 @@ const DIFF_COLORS: Record<string, { bg: string; text: string; label: string }> =
   advanced:     { bg: "bg-red-100 dark:bg-red-500/20", text: "text-red-700 dark:text-red-300", label: "Advanced" },
 };
 
+// ─── Templates ───────────────────────────────────────────────────────────────
+
+interface Template { id: string; label: string; icon: string; desc: string; detail: DetailLevel }
+
+const TEMPLATES: Template[] = [
+  { id: "study",     label: "Study Notes",      icon: "📖", desc: "Comprehensive study material",      detail: "detailed" },
+  { id: "cheatsheet",label: "Exam Cheat Sheet",  icon: "📋", desc: "Quick-reference key facts",         detail: "summary" },
+  { id: "research",  label: "Essay Research",     icon: "🔬", desc: "In-depth analysis & sources",       detail: "expert" },
+  { id: "revision",  label: "Quick Revision",     icon: "⚡", desc: "Fast recap before a test",          detail: "brief" },
+  { id: "deepdive",  label: "Deep Dive",          icon: "🧠", desc: "Expert-level mastery content",      detail: "expert" },
+];
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function Home() {
   const [topics, setTopics] = useState<string[]>([""]);
   const [grade, setGrade] = useState("");
   const [detailLevel, setDetailLevel] = useState<DetailLevel>("detailed");
+  const [template, setTemplate] = useState("study");
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<NotesContent | null>(null);
   const [error, setError] = useState("");
@@ -67,6 +81,17 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"notes" | "mindmap" | "flowchart" | "quiz">("notes");
   const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [revealedHints, setRevealedHints] = useState<Set<number>>(new Set());
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Image state
+  const [heroImage, setHeroImage] = useState<string | null>(null);
+  const [heroImageLoading, setHeroImageLoading] = useState(false);
 
   const hasFlowchart = notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0;
 
@@ -92,7 +117,7 @@ export default function Home() {
     setHistory(prev => { const u = [item, ...prev].slice(0, 20); localStorage.setItem("noteforge-history", JSON.stringify(u)); return u; });
   }, []);
 
-  const loadFromHistory = (item: HistoryItem) => { setNotes(item.notes); setActiveSection(0); setActiveTab("notes"); setShowHistory(false); setEditMode(false); setRevealedAnswers(new Set()); setRevealedHints(new Set()); };
+  const loadFromHistory = (item: HistoryItem) => { setNotes(item.notes); setActiveSection(0); setActiveTab("notes"); setShowHistory(false); setEditMode(false); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null); };
   const deleteFromHistory = (id: string) => { setHistory(prev => { const u = prev.filter(h => h.id !== id); localStorage.setItem("noteforge-history", JSON.stringify(u)); return u; }); };
 
   // ─── Share URL ─────────────────────────────────────────────────────────────
@@ -113,24 +138,48 @@ export default function Home() {
     return () => clearInterval(i);
   }, [loading]);
 
+  // ─── Auto-scroll chat ─────────────────────────────────────────────────────
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages, chatLoading]);
+
   // ─── Topic handlers ────────────────────────────────────────────────────────
   const addTopic = () => setTopics(p => [...p, ""]);
   const removeTopic = (i: number) => setTopics(p => p.filter((_, idx) => idx !== i));
   const updateTopic = (i: number, v: string) => setTopics(p => p.map((t, idx) => idx === i ? v : t));
+
+  // ─── Template select ───────────────────────────────────────────────────────
+  function selectTemplate(t: Template) {
+    setTemplate(t.id);
+    setDetailLevel(t.detail);
+  }
 
   // ─── Generate ──────────────────────────────────────────────────────────────
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     const combined = topics.filter(t => t.trim()).join(", ");
     if (!combined) return;
-    setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set());
+    setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null);
     try {
-      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, detailLevel, grade: grade || undefined }) });
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, detailLevel, template, grade: grade || undefined }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
+      // Fire off hero image generation in background
+      generateHeroImage(data.title);
     } catch (err) { setError(err instanceof Error ? err.message : "Something went wrong"); }
     finally { setLoading(false); }
+  }
+
+  // ─── Hero Image ────────────────────────────────────────────────────────────
+  async function generateHeroImage(title: string) {
+    setHeroImageLoading(true);
+    try {
+      const res = await fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: title }) });
+      const data = await res.json();
+      if (res.ok && data.url) setHeroImage(data.url);
+    } catch { /* silent fail — image is optional */ }
+    finally { setHeroImageLoading(false); }
   }
 
   // ─── Download Word ─────────────────────────────────────────────────────────
@@ -160,6 +209,25 @@ export default function Home() {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
 
+  // ─── Chat ──────────────────────────────────────────────────────────────────
+  async function sendChat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!chatInput.trim() || !notes || chatLoading) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatMessages(prev => [...prev, { role: "user", content: msg }]);
+    setChatLoading(true);
+    try {
+      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: msg, notesContext: notes, grade: grade || undefined }) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setChatMessages(prev => [...prev, { role: "assistant", content: data.reply }]);
+    } catch (err) {
+      setChatMessages(prev => [...prev, { role: "assistant", content: `Error: ${err instanceof Error ? err.message : "Failed to get response"}` }]);
+    }
+    finally { setChatLoading(false); }
+  }
+
   // ─── Edit helpers ──────────────────────────────────────────────────────────
   function updateNotes(fn: (n: NotesContent) => NotesContent) { setNotes(p => p ? fn({ ...p }) : p); }
   function updateSection(i: number, f: keyof Section, v: string | string[]) { updateNotes(n => { const s = [...n.sections]; s[i] = { ...s[i], [f]: v }; return { ...n, sections: s }; }); }
@@ -170,9 +238,8 @@ export default function Home() {
     return <textarea value={value} onChange={e => onChange(e.target.value)} className="edit-textarea w-full bg-blue-50/50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/30 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-blue-400 text-slate-800 dark:text-slate-200 resize-y" />;
   }
 
-  // Card wrapper
-  function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-    return <div className={`bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 sm:p-6 ${className}`}>{children}</div>;
+  function Card({ children, className = "", delay = 0 }: { children: React.ReactNode; className?: string; delay?: number }) {
+    return <div className={`bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-5 sm:p-6 animate-fadeInUp ${className}`} style={delay ? { animationDelay: `${delay}ms` } : undefined}>{children}</div>;
   }
 
   function SectionTitle({ children, color = "text-blue-600 dark:text-blue-300" }: { children: React.ReactNode; color?: string }) {
@@ -185,8 +252,8 @@ export default function Home() {
 
       {/* ─── History Sidebar ──────────────────────────────────────── */}
       {showHistory && (<>
-        <div className="fixed inset-0 bg-black/50 z-40" onClick={() => setShowHistory(false)} />
-        <div className="fixed inset-y-0 left-0 w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10 z-50 flex flex-col shadow-2xl">
+        <div className="fixed inset-0 bg-black/50 z-40 animate-fadeIn" onClick={() => setShowHistory(false)} />
+        <div className="fixed inset-y-0 left-0 w-80 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-white/10 z-50 flex flex-col shadow-2xl animate-slideInRight">
           <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-white/10">
             <h3 className="text-slate-800 dark:text-white font-semibold">History</h3>
             <button onClick={() => setShowHistory(false)} className="text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-white p-1">
@@ -235,14 +302,27 @@ export default function Home() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* ─── Hero ─────────────────────────────────────────────── */}
         {!notes && !loading && (
-          <div className="text-center mb-10">
+          <div className="text-center mb-10 animate-fadeInUp">
             <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-4">Generate Expert Notes on <span className="text-blue-600 dark:text-blue-400">Any Topic</span></h2>
-            <p className="text-slate-500 dark:text-slate-400 text-base sm:text-lg max-w-2xl mx-auto">Detailed notes with examples, analogies, misconceptions, practice problems, visual flowcharts, and downloadable Word documents.</p>
+            <p className="text-slate-500 dark:text-slate-400 text-base sm:text-lg max-w-2xl mx-auto">Detailed notes with examples, analogies, misconceptions, practice problems, visual flowcharts, AI illustrations, and downloadable Word documents.</p>
+          </div>
+        )}
+
+        {/* ─── Template Selector ────────────────────────────────── */}
+        {!notes && !loading && (
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
+            {TEMPLATES.map(t => (
+              <button key={t.id} type="button" onClick={() => selectTemplate(t)} className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all ${template === t.id ? "border-blue-500 dark:border-blue-400 bg-blue-50 dark:bg-blue-500/15 shadow-sm scale-[1.02]" : "border-slate-200 dark:border-white/10 bg-white dark:bg-white/5 hover:border-slate-300 dark:hover:border-white/20"}`}>
+                <span className="text-xl">{t.icon}</span>
+                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{t.label}</span>
+                <span className="text-xs text-slate-400 dark:text-slate-500 hidden sm:block">{t.desc}</span>
+              </button>
+            ))}
           </div>
         )}
 
         {/* ─── Topic Form ───────────────────────────────────────── */}
-        <form onSubmit={handleGenerate} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 sm:p-6 mb-8 backdrop-blur-sm no-print">
+        <form onSubmit={handleGenerate} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-4 sm:p-6 mb-8 backdrop-blur-sm no-print animate-fadeInUp" style={{ animationDelay: "200ms" }}>
           <div className="space-y-3">
             {topics.map((topic, i) => (
               <div key={i} className="flex gap-2">
@@ -269,16 +349,16 @@ export default function Home() {
                   <button key={lvl} type="button" onClick={() => setDetailLevel(lvl)} className={`px-3 py-2.5 rounded-xl text-sm font-medium capitalize transition ${detailLevel === lvl ? "bg-blue-600 dark:bg-blue-500 text-white" : "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-white/20"}`}>{lvl}</button>
                 ))}
               </div>
-              <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition whitespace-nowrap">{loading ? "Generating..." : "Generate Notes"}</button>
+              <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="px-6 py-3 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all whitespace-nowrap active:scale-95">{loading ? "Generating..." : "Generate Notes"}</button>
             </div>
           </div>
         </form>
 
-        {error && <div className="bg-red-50 dark:bg-red-500/20 border border-red-200 dark:border-red-500/50 rounded-xl p-4 mb-6 text-red-700 dark:text-red-300">{error}</div>}
+        {error && <div className="bg-red-50 dark:bg-red-500/20 border border-red-200 dark:border-red-500/50 rounded-xl p-4 mb-6 text-red-700 dark:text-red-300 animate-scaleIn">{error}</div>}
 
         {/* ─── Loading ──────────────────────────────────────────── */}
         {loading && (
-          <div className="space-y-4">
+          <div className="space-y-4 animate-fadeIn">
             <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-8 text-center">
               <div className="inline-flex items-center gap-3 text-blue-600 dark:text-blue-300">
                 <svg className="animate-spin w-5 h-5" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
@@ -286,7 +366,16 @@ export default function Home() {
               </div>
               <p className="text-slate-400 dark:text-slate-500 text-sm mt-2 tabular-nums">{elapsed}s elapsed</p>
             </div>
-            {[1, 2, 3].map(i => <div key={i} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 animate-pulse"><div className="h-5 bg-slate-200 dark:bg-white/10 rounded w-1/3 mb-4" /><div className="space-y-2"><div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-full" /><div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-5/6" /></div></div>)}
+            {[1, 2, 3].map(i => (
+              <div key={i} className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-6 overflow-hidden" style={{ animationDelay: `${i * 150}ms` }}>
+                <div className="h-5 bg-slate-200 dark:bg-white/10 rounded w-1/3 mb-4 shimmer" />
+                <div className="space-y-2">
+                  <div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-full shimmer" />
+                  <div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-5/6 shimmer" />
+                  <div className="h-3 bg-slate-200 dark:bg-white/10 rounded w-4/6 shimmer" />
+                </div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -294,44 +383,120 @@ export default function Home() {
         {notes && !loading && (
           <div className="space-y-6">
 
-            {/* Title bar + actions */}
-            <div className="bg-gradient-to-r from-blue-600/20 to-blue-500/5 dark:from-blue-600/30 dark:to-blue-500/10 border border-blue-300/50 dark:border-blue-400/30 rounded-2xl p-4 sm:p-6">
-              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-                <div>
-                  <p className="text-blue-600 dark:text-blue-300 text-sm font-medium mb-1">Generated Notes</p>
-                  {editMode
-                    ? <input value={notes.title} onChange={e => updateNotes(n => ({ ...n, title: e.target.value }))} className="text-2xl font-bold bg-transparent border-b-2 border-blue-400 text-slate-900 dark:text-white focus:outline-none w-full" />
-                    : <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{notes.title}</h2>}
-                  <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-                    {notes.sections.length} sections &middot; {notes.key_terms.length} key terms &middot; {notes.common_misconceptions?.length || 0} misconceptions &middot; {notes.practice_problems?.length || 0} practice problems
-                  </p>
+            {/* Title bar + hero image + actions */}
+            <div className="bg-gradient-to-r from-blue-600/20 to-blue-500/5 dark:from-blue-600/30 dark:to-blue-500/10 border border-blue-300/50 dark:border-blue-400/30 rounded-2xl overflow-hidden animate-fadeInUp">
+              {/* AI Hero Image */}
+              {(heroImage || heroImageLoading) && (
+                <div className="relative w-full h-48 sm:h-56 bg-slate-100 dark:bg-slate-800/50 overflow-hidden">
+                  {heroImage ? (
+                    <img src={heroImage} alt={notes.title} className="w-full h-full object-cover animate-fadeIn" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="flex items-center gap-2 text-slate-400 dark:text-slate-500 text-sm">
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                        Generating AI illustration...
+                      </div>
+                    </div>
+                  )}
+                  {heroImage && <div className="absolute inset-0 bg-gradient-to-t from-blue-900/60 via-transparent to-transparent" />}
                 </div>
-                <div className="flex flex-wrap gap-2 no-print">
-                  <button onClick={() => setEditMode(!editMode)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition ${editMode ? "bg-amber-500 text-white" : "bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-white/20"}`}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                    {editMode ? "Editing" : "Edit"}
-                  </button>
-                  <button onClick={handleDownloadWord} disabled={downloading} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    {downloading ? "..." : "Download Word"}
-                  </button>
-                  <button onClick={handleShare} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-500 dark:bg-green-500 dark:hover:bg-green-400 text-white text-sm font-medium rounded-xl transition">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
-                    {copied ? "Copied!" : "Share"}
-                  </button>
+              )}
+              <div className="p-4 sm:p-6">
+                <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                  <div>
+                    <p className="text-blue-600 dark:text-blue-300 text-sm font-medium mb-1">Generated Notes</p>
+                    {editMode
+                      ? <input value={notes.title} onChange={e => updateNotes(n => ({ ...n, title: e.target.value }))} className="text-2xl font-bold bg-transparent border-b-2 border-blue-400 text-slate-900 dark:text-white focus:outline-none w-full" />
+                      : <h2 className="text-2xl font-bold text-slate-900 dark:text-white">{notes.title}</h2>}
+                    <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
+                      {notes.sections.length} sections &middot; {notes.key_terms.length} key terms &middot; {notes.common_misconceptions?.length || 0} misconceptions &middot; {notes.practice_problems?.length || 0} practice problems
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2 no-print">
+                    <button onClick={() => setEditMode(!editMode)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 ${editMode ? "bg-amber-500 text-white" : "bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-white/20"}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                      {editMode ? "Editing" : "Edit"}
+                    </button>
+                    <button onClick={handleDownloadWord} disabled={downloading} className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all active:scale-95">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                      {downloading ? "..." : "Word"}
+                    </button>
+                    <button onClick={handleShare} className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-500 dark:bg-green-500 dark:hover:bg-green-400 text-white text-sm font-medium rounded-xl transition-all active:scale-95">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" /></svg>
+                      {copied ? "Copied!" : "Share"}
+                    </button>
+                    <button onClick={() => setChatOpen(!chatOpen)} className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium transition-all active:scale-95 ${chatOpen ? "bg-purple-500 text-white" : "bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-500/30"}`}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                      Ask AI
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
+            {/* ─── AI Chat Panel ──────────────────────────────────── */}
+            {chatOpen && (
+              <div className="bg-white dark:bg-white/5 border border-purple-200 dark:border-purple-500/30 rounded-2xl overflow-hidden animate-scaleIn">
+                <div className="bg-purple-50 dark:bg-purple-500/10 px-4 py-3 flex items-center justify-between border-b border-purple-200 dark:border-purple-500/20">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">💬</span>
+                    <h3 className="text-purple-700 dark:text-purple-300 font-semibold text-sm">Ask AI about your notes</h3>
+                  </div>
+                  <button onClick={() => setChatOpen(false)} className="text-purple-400 hover:text-purple-600 dark:hover:text-purple-200 p-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                {/* Messages */}
+                <div className="max-h-80 overflow-y-auto p-4 space-y-3">
+                  {chatMessages.length === 0 && (
+                    <div className="text-center py-4">
+                      <p className="text-slate-400 dark:text-slate-500 text-sm mb-3">Ask anything about your notes:</p>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        {["Explain section 1 simpler", "Give me more examples", "Summarize the key points", "How does this connect to real life?"].map((q, i) => (
+                          <button key={i} onClick={() => { setChatInput(q); }} className="px-3 py-1.5 bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 rounded-full text-xs text-purple-600 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-500/20 transition">
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {chatMessages.map((msg, i) => (
+                    <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} animate-fadeInUp`}>
+                      <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${msg.role === "user" ? "bg-purple-500 text-white rounded-br-md" : "bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 rounded-bl-md"}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                  {chatLoading && (
+                    <div className="flex justify-start animate-fadeIn">
+                      <div className="bg-slate-100 dark:bg-white/10 rounded-2xl rounded-bl-md px-4 py-3 flex gap-1.5">
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    </div>
+                  )}
+                  <div ref={chatEndRef} />
+                </div>
+                {/* Input */}
+                <form onSubmit={sendChat} className="flex gap-2 p-3 border-t border-purple-100 dark:border-purple-500/20 bg-purple-50/50 dark:bg-purple-500/5">
+                  <input value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Ask a follow-up question..." disabled={chatLoading} className="flex-1 bg-white dark:bg-white/10 border border-purple-200 dark:border-purple-500/30 rounded-xl px-4 py-2.5 text-sm text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-purple-400 transition" />
+                  <button type="submit" disabled={chatLoading || !chatInput.trim()} className="px-4 py-2.5 bg-purple-500 hover:bg-purple-400 disabled:opacity-50 text-white rounded-xl text-sm font-medium transition-all active:scale-95">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                  </button>
+                </form>
+              </div>
+            )}
+
             {/* ─── Tab nav ────────────────────────────────────────── */}
-            <div className="flex gap-1 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-1.5 no-print">
+            <div className="flex gap-1 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-1.5 no-print animate-fadeInUp" style={{ animationDelay: "100ms" }}>
               {([
                 { key: "notes" as const, label: "Notes", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", show: true },
                 { key: "mindmap" as const, label: "Mind Map", icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z", show: true },
                 { key: "flowchart" as const, label: "Flowchart", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z", show: hasFlowchart },
                 { key: "quiz" as const, label: "Quiz", icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z", show: true },
               ]).filter(t => t.show).map(({ key, label, icon }) => (
-                <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition ${activeTab === key ? "bg-blue-600 dark:bg-blue-500 text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10"}`}>
+                <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === key ? "bg-blue-600 dark:bg-blue-500 text-white shadow-sm" : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10"}`}>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
                 </button>
               ))}
@@ -339,7 +504,7 @@ export default function Home() {
 
             {/* ═══ NOTES TAB ═══════════════════════════════════════ */}
             {activeTab === "notes" && (
-              <div className="space-y-6">
+              <div className="space-y-6 stagger-children tab-content">
 
                 {/* Overview */}
                 <Card>
@@ -360,7 +525,7 @@ export default function Home() {
                     const sec = notes.sections[activeSection];
                     const diff = DIFF_COLORS[sec.difficulty] || DIFF_COLORS.intermediate;
                     return (
-                      <div className="p-5 sm:p-6 space-y-4">
+                      <div className="p-5 sm:p-6 space-y-4 tab-content">
                         {/* TL;DR + Difficulty badge */}
                         <div className="flex flex-wrap items-start gap-2">
                           {sec.difficulty && <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${diff.bg} ${diff.text}`}>{diff.label}</span>}
@@ -499,7 +664,7 @@ export default function Home() {
                   </Card>
                 )}
 
-                {/* Process Flow (list view in notes tab) */}
+                {/* Process Flow */}
                 {hasFlowchart && (
                   <Card>
                     <SectionTitle>{notes.process_flow.title}</SectionTitle>
@@ -529,8 +694,8 @@ export default function Home() {
                             <button onClick={() => setRevealedHints(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n; })} className="text-xs text-amber-600 dark:text-amber-400 hover:underline">{revealedHints.has(i) ? "Hide hint" : "Show hint"}</button>
                             <button onClick={() => setRevealedAnswers(p => { const n = new Set(p); n.has(i) ? n.delete(i) : n.add(i); return n; })} className="text-xs text-green-600 dark:text-green-400 hover:underline">{revealedAnswers.has(i) ? "Hide answer" : "Show answer"}</button>
                           </div>
-                          {revealedHints.has(i) && <p className="text-amber-700 dark:text-amber-300 text-sm mt-2 bg-amber-50 dark:bg-amber-500/10 rounded p-2">Hint: {pp.hint}</p>}
-                          {revealedAnswers.has(i) && <p className="text-green-700 dark:text-green-300 text-sm mt-2 bg-green-50 dark:bg-green-500/10 rounded p-2">{pp.answer}</p>}
+                          {revealedHints.has(i) && <p className="text-amber-700 dark:text-amber-300 text-sm mt-2 bg-amber-50 dark:bg-amber-500/10 rounded p-2 animate-fadeIn">Hint: {pp.hint}</p>}
+                          {revealedAnswers.has(i) && <p className="text-green-700 dark:text-green-300 text-sm mt-2 bg-green-50 dark:bg-green-500/10 rounded p-2 animate-fadeIn">{pp.answer}</p>}
                         </div>
                       ))}
                     </div>
@@ -542,7 +707,7 @@ export default function Home() {
                   <SectionTitle>Key Terms & Glossary</SectionTitle>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {notes.key_terms.map((item, i) => (
-                      <div key={i} className="bg-slate-50 dark:bg-white/5 rounded-xl p-3">
+                      <div key={i} className="bg-slate-50 dark:bg-white/5 rounded-xl p-3 hover:bg-slate-100 dark:hover:bg-white/10 transition">
                         <p className="text-blue-600 dark:text-blue-400 font-semibold text-sm">{item.term}</p>
                         <p className="text-slate-500 dark:text-slate-400 text-xs mt-1 leading-relaxed">{item.definition}</p>
                       </div>
@@ -570,12 +735,14 @@ export default function Home() {
 
             {/* ═══ MIND MAP TAB ═════════════════════════════════════ */}
             {activeTab === "mindmap" && (
-              <MindMap notes={notes} isDark={theme === "dark"} />
+              <div className="tab-content">
+                <MindMap notes={notes} isDark={theme === "dark"} />
+              </div>
             )}
 
             {/* ═══ FLOWCHART TAB ═══════════════════════════════════ */}
             {activeTab === "flowchart" && hasFlowchart && (
-              <Card>
+              <Card className="tab-content">
                 <SectionTitle>{notes.process_flow.title}</SectionTitle>
                 <p className="text-slate-500 dark:text-slate-400 text-sm mb-4">Visual representation of the process flow</p>
                 <Flowchart steps={notes.process_flow.steps} isDark={theme === "dark"} />
@@ -592,15 +759,15 @@ export default function Home() {
 
             {/* ═══ QUIZ TAB ════════════════════════════════════════ */}
             {activeTab === "quiz" && (
-              <Card>
+              <Card className="tab-content">
                 <h3 className="text-lg font-semibold text-purple-600 dark:text-purple-400 mb-4">Test Your Knowledge</h3>
                 <QuizMode notes={notes} />
               </Card>
             )}
 
             {/* Bottom download */}
-            <div className="text-center pt-4 pb-8 no-print">
-              <button onClick={handleDownloadWord} disabled={downloading} className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 text-white font-semibold rounded-xl transition text-lg">
+            <div className="text-center pt-4 pb-8 no-print animate-fadeInUp">
+              <button onClick={handleDownloadWord} disabled={downloading} className="inline-flex items-center justify-center gap-2 px-8 py-4 bg-blue-600 hover:bg-blue-500 dark:bg-blue-500 dark:hover:bg-blue-400 disabled:opacity-50 text-white font-semibold rounded-xl transition-all text-lg active:scale-95">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 {downloading ? "Preparing..." : "Download Full Word Document"}
               </button>
