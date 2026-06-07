@@ -167,11 +167,15 @@ export default function Home() {
   // ─── Loading animation ────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!loading) return;
-    setLoadingMsg(0);
+    if (!loading) {
+      setLoadingMsg(0);
+      return;
+    }
     const interval = setInterval(() => {
-      setLoadingMsg((prev) => (prev + 1) % LOADING_MESSAGES.length);
-    }, 3000);
+      setLoadingMsg((prev) =>
+        prev < LOADING_MESSAGES.length - 1 ? prev + 1 : prev
+      );
+    }, 4000);
     return () => clearInterval(interval);
   }, [loading]);
 
@@ -691,9 +695,9 @@ export default function Home() {
               {/* Progress bar */}
               <div className="mt-4 mx-auto max-w-xs h-1 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-[3000ms] ease-linear"
+                  className="h-full bg-blue-500 rounded-full transition-all duration-[4000ms] ease-linear"
                   style={{
-                    width: `${((loadingMsg + 1) / LOADING_MESSAGES.length) * 100}%`,
+                    width: `${Math.min(((loadingMsg + 1) / LOADING_MESSAGES.length) * 95 + 5, 95)}%`,
                   }}
                 />
               </div>
