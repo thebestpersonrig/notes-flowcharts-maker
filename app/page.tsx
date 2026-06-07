@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 
 const Flowchart = dynamic(() => import("./components/Flowchart"), { ssr: false });
 const QuizMode = dynamic(() => import("./components/QuizMode"), { ssr: false });
+const MindMap = dynamic(() => import("./components/MindMap"), { ssr: false });
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ export default function Home() {
   const [downloading, setDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [activeTab, setActiveTab] = useState<"notes" | "flowchart" | "quiz">("notes");
+  const [activeTab, setActiveTab] = useState<"notes" | "mindmap" | "flowchart" | "quiz">("notes");
   const [revealedAnswers, setRevealedAnswers] = useState<Set<number>>(new Set());
   const [revealedHints, setRevealedHints] = useState<Set<number>>(new Set());
 
@@ -326,6 +327,7 @@ export default function Home() {
             <div className="flex gap-1 bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 rounded-2xl p-1.5 no-print">
               {([
                 { key: "notes" as const, label: "Notes", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", show: true },
+                { key: "mindmap" as const, label: "Mind Map", icon: "M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z", show: true },
                 { key: "flowchart" as const, label: "Flowchart", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z", show: hasFlowchart },
                 { key: "quiz" as const, label: "Quiz", icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z", show: true },
               ]).filter(t => t.show).map(({ key, label, icon }) => (
@@ -564,6 +566,11 @@ export default function Home() {
                   </Card>
                 )}
               </div>
+            )}
+
+            {/* ═══ MIND MAP TAB ═════════════════════════════════════ */}
+            {activeTab === "mindmap" && (
+              <MindMap notes={notes} isDark={theme === "dark"} />
             )}
 
             {/* ═══ FLOWCHART TAB ═══════════════════════════════════ */}
