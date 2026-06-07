@@ -63,7 +63,7 @@ Rules:
 - Write at a university level`;
 
   const message = await client.chat.completions.create({
-    model: "deepseek/deepseek-chat-v3-0324:free",
+    model: "deepseek/deepseek-chat:free",
     max_tokens: 8000,
     messages: [{ role: "user", content: prompt }],
   });
