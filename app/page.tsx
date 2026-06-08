@@ -94,6 +94,7 @@ export default function Home() {
   const [topics, setTopics] = useState<string[]>([""]);
   const [grade, setGrade] = useState("");
   const [template, setTemplate] = useState("study");
+  const [length, setLength] = useState("medium");
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<NotesContent | null>(null);
   const [error, setError] = useState("");
@@ -193,7 +194,7 @@ export default function Home() {
     setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null); setHeroSource(null);
     try {
       const finalTopic = compareMode && compareTopic.trim() ? `${combined} vs ${compareTopic.trim()}` : combined;
-      const body: Record<string, unknown> = { topic: finalTopic, template: template || "study", grade: grade || undefined };
+      const body: Record<string, unknown> = { topic: finalTopic, template: template || "study", grade: grade || undefined, length: length || "medium" };
       if (compareMode && compareTopic.trim()) body.compare = true;
       if (attachment) { body.file = { name: attachment.name, base64: attachment.base64, mime: attachment.mime }; }
       const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -401,6 +402,11 @@ export default function Home() {
                 <select value={grade} onChange={e => setGrade(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
                   <option value="">Grade (optional)</option>
                   {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                </select>
+                <select value={length} onChange={e => setLength(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
+                  <option value="short">Short</option>
+                  <option value="medium">Medium</option>
+                  <option value="detailed">Detailed</option>
                 </select>
                 <button type="button" onClick={() => setShowVisuals(!showVisuals)}
                   className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${showVisuals ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-slate-500 hover:bg-white/5"}`}>

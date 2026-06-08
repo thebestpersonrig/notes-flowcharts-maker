@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, grade, template = "study", file, compare } = await req.json();
+    const { topic, grade, template = "study", file, compare, length = "medium" } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -174,6 +174,24 @@ export async function POST(req: NextRequest) {
     }
 
     const tmpl = TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
+
+    // Scale maxTokens by length
+    const LENGTH_SCALE: Record<string, { multiplier: number; instruction: string }> = {
+      short: {
+        multiplier: 0.5,
+        instruction: `LENGTH: SHORT — Be concise. 2-3 sections max. Keep explanations brief (1-2 paragraphs each). Fewer examples, fewer key terms (5-8). Get to the point fast. No filler.`,
+      },
+      medium: {
+        multiplier: 1,
+        instruction: `LENGTH: MEDIUM — Standard depth. 3-5 sections. Balanced explanations with enough detail to understand fully.`,
+      },
+      detailed: {
+        multiplier: 1.4,
+        instruction: `LENGTH: DETAILED — Go deep. 5-7+ sections with subsections. Thorough explanations, multiple examples per section, extensive key terms (12-20). Cover edge cases, nuances, and connections. Leave nothing out.`,
+      },
+    };
+    const lengthConfig = LENGTH_SCALE[length] || LENGTH_SCALE.medium;
+    const finalMaxTokens = Math.round(tmpl.maxTokens * lengthConfig.multiplier);
 
     // Build grade-aware instructions
     let gradeInstruction = "";
@@ -216,6 +234,8 @@ COMPARE MODE: The topic contains "vs" — the user wants a COMPARISON.
       : "";
 
     const prompt = `${tmpl.system}
+
+${lengthConfig.instruction}
 
 TOPIC: "${topic}"${imageInstruction}${fileContext}${compareInstruction}
 ${gradeInstruction}
@@ -299,7 +319,7 @@ OUTPUT RULES:
 
     const message = await client.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: tmpl.maxTokens,
+      max_tokens: finalMaxTokens,
       messages,
     });
 
