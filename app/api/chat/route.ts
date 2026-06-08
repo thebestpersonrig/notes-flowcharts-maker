@@ -14,6 +14,9 @@ export async function POST(req: NextRequest) {
     if (!message?.trim()) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
     }
+    if (!notesContext?.title) {
+      return NextResponse.json({ error: "Notes context is required" }, { status: 400 });
+    }
 
     const gradeHint = grade ? ` The student is in grade ${grade}, so adjust complexity accordingly.` : "";
 
