@@ -118,6 +118,10 @@ export default function Home() {
   const [heroImage, setHeroImage] = useState<string | null>(null);
   const [heroImageLoading, setHeroImageLoading] = useState(false);
 
+  const [attachment, setAttachment] = useState<{ name: string; size: number; base64: string; mime: string } | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const resultsRef = useRef<HTMLDivElement>(null);
   const hasFlowchart = notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0;
 
@@ -144,13 +148,43 @@ export default function Home() {
 
   function selectTemplate(t: Template) { setTemplate(t.id); }
 
+  const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+  const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif", "text/plain", "text/markdown", "application/pdf"];
+
+  function handleFileSelect(file: File | null) {
+    if (!file) return;
+    if (!ACCEPTED_TYPES.includes(file.type) && !file.name.endsWith(".md") && !file.name.endsWith(".txt")) {
+      setError("Unsupported file type. Use images (JPG, PNG, WebP), text files, or PDF.");
+      return;
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Max 2MB.`);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = (reader.result as string).split(",")[1];
+      setAttachment({ name: file.name, size: file.size, base64, mime: file.type || "application/octet-stream" });
+      setError("");
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault(); setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFileSelect(file);
+  }
+
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     const combined = topics.filter(t => t.trim()).join(", ");
     if (!combined) return;
     setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null);
     try {
-      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, template: template || "study", grade: grade || undefined }) });
+      const body: Record<string, unknown> = { topic: combined, template: template || "study", grade: grade || undefined };
+      if (attachment) { body.file = { name: attachment.name, base64: attachment.base64, mime: attachment.mime }; }
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
@@ -160,7 +194,7 @@ export default function Home() {
     finally { setLoading(false); }
   }
 
-  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   async function generateHeroImage(title: string) { setHeroImageLoading(true); try { const r = await fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: title }) }); const d = await r.json(); if (r.ok && d.url) setHeroImage(d.url); } catch { /* */ } finally { setHeroImageLoading(false); } }
 
@@ -287,6 +321,41 @@ export default function Home() {
                   {topics.length > 1 && <button type="button" onClick={() => removeTopic(i)} className="px-3 text-slate-400 hover:text-rose-400 transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>}
                 </div>
               ))}
+              {/* File attachment */}
+              {!notes && (
+                <div
+                  onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                  className={`relative rounded-xl border-2 border-dashed transition-all ${dragOver ? "border-indigo-500 bg-indigo-500/10" : attachment ? "border-emerald-500/30 bg-emerald-500/5" : "border-white/10 hover:border-white/20"} ${attachment ? "p-3" : "p-3"}`}
+                >
+                  <input ref={fileInputRef} type="file" accept="image/*,.txt,.md,.pdf" onChange={e => handleFileSelect(e.target.files?.[0] || null)} className="hidden" />
+                  {attachment ? (
+                    <div className="flex items-center gap-3">
+                      {attachment.mime.startsWith("image/") && (
+                        <img src={`data:${attachment.mime};base64,${attachment.base64}`} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0 border border-white/10" />
+                      )}
+                      {!attachment.mime.startsWith("image/") && (
+                        <div className="w-12 h-12 rounded-lg bg-indigo-500/15 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-slate-200 truncate">{attachment.name}</p>
+                        <p className="text-xs text-slate-500">{(attachment.size / 1024).toFixed(0)} KB &middot; AI will analyze this</p>
+                      </div>
+                      <button type="button" onClick={() => setAttachment(null)} className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition flex-shrink-0">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 text-slate-400 hover:text-slate-300 transition py-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                      <span className="text-sm">Attach a photo or file <span className="text-slate-500 text-xs">(max 2MB)</span></span>
+                    </button>
+                  )}
+                </div>
+              )}
               <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center pt-1">
                 <button type="button" onClick={addTopic} className="text-indigo-500 dark:text-indigo-400 text-sm font-medium hover:text-indigo-400 transition flex items-center gap-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add topic

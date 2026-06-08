@@ -156,11 +156,19 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, grade, template = "study" } = await req.json();
+    const { topic, grade, template = "study", file } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
         { error: "Topic is required" },
+        { status: 400 }
+      );
+    }
+
+    // Validate file if present (2MB base64 ≈ 2.66MB string)
+    if (file && typeof file.base64 === "string" && file.base64.length > 3_000_000) {
+      return NextResponse.json(
+        { error: "File too large. Max 2MB." },
         { status: 400 }
       );
     }
@@ -183,9 +191,22 @@ The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
 `;
     }
 
+    // Handle text file content — decode base64 and include inline
+    let fileContext = "";
+    const isImage = file?.mime?.startsWith("image/");
+    if (file && !isImage) {
+      try {
+        const text = Buffer.from(file.base64, "base64").toString("utf-8").slice(0, 15_000);
+        fileContext = `\n\nATTACHED FILE ("${file.name}"):\n---\n${text}\n---\nUse this file's content as source material. Extract key information and incorporate it into the notes.\n`;
+      } catch { /* ignore decode errors */ }
+    }
+    const imageInstruction = isImage
+      ? "\n\nThe user has attached an image (shown below). Carefully analyze everything visible in the image — text, diagrams, equations, handwriting, charts — and use it as primary source material for generating the notes. The notes should cover what's in the image.\n"
+      : "";
+
     const prompt = `${tmpl.system}
 
-TOPIC: "${topic}"
+TOPIC: "${topic}"${imageInstruction}${fileContext}
 ${gradeInstruction}
 
 Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
@@ -247,10 +268,28 @@ OUTPUT RULES:
 - Every piece of content must be factually accurate
 - If a grade level is specified, EVERY piece of content must be appropriate for that level — this overrides everything else`;
 
+    // Build messages — use multimodal format for images
+    type TextPart = { type: "text"; text: string };
+    type ImagePart = { type: "image_url"; image_url: { url: string } };
+    type ContentPart = TextPart | ImagePart;
+
+    let messages: { role: "user"; content: string | ContentPart[] }[];
+    if (isImage && file) {
+      messages = [{
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:${file.mime};base64,${file.base64}` } },
+        ],
+      }];
+    } else {
+      messages = [{ role: "user", content: prompt }];
+    }
+
     const message = await client.chat.completions.create({
       model: "openrouter/auto",
       max_tokens: tmpl.maxTokens,
-      messages: [{ role: "user", content: prompt }],
+      messages,
     });
 
     const raw = message.choices[0].message.content ?? "";
