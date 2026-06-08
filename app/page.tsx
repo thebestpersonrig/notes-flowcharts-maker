@@ -117,6 +117,8 @@ export default function Home() {
 
   const [heroImage, setHeroImage] = useState<string | null>(null);
   const [heroImageLoading, setHeroImageLoading] = useState(false);
+  const [heroSource, setHeroSource] = useState<"web" | "ai" | null>(null);
+  const [showVisuals, setShowVisuals] = useState(true);
 
   const [attachment, setAttachment] = useState<{ name: string; size: number; base64: string; mime: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -189,7 +191,7 @@ export default function Home() {
     e.preventDefault();
     const combined = topics.filter(t => t.trim()).join(", ");
     if (!combined) return;
-    setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null);
+    setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null); setHeroSource(null);
     try {
       const finalTopic = compareMode && compareTopic.trim() ? `${combined} vs ${compareTopic.trim()}` : combined;
       const body: Record<string, unknown> = { topic: finalTopic, template: template || "study", grade: grade || undefined };
@@ -200,7 +202,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-      generateHeroImage(data.title);
+      if (showVisuals) generateHeroImage(data.title);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429") || msg.toLowerCase().includes("too many")) {
@@ -212,7 +214,14 @@ export default function Home() {
 
   function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setCompareMode(false); setCompareTopic(""); setShowToc(false); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
-  async function generateHeroImage(title: string) { setHeroImageLoading(true); try { const r = await fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: title }) }); const d = await r.json(); if (r.ok && d.url) setHeroImage(d.url); } catch { /* */ } finally { setHeroImageLoading(false); } }
+  async function generateHeroImage(title: string) {
+    setHeroImageLoading(true); setHeroSource(null);
+    try {
+      const r = await fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: title }) });
+      const d = await r.json();
+      if (r.ok && d.url) { setHeroImage(d.url); setHeroSource(d.source || "ai"); }
+    } catch { /* */ } finally { setHeroImageLoading(false); }
+  }
 
   async function handleDownloadWord() {
     if (!notes) return; setDownloading(true);
@@ -394,9 +403,11 @@ export default function Home() {
                   <option value="">Grade (optional)</option>
                   {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                 </select>
-                <select value={template} onChange={e => setTemplate(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
-                  {TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
-                </select>
+                <button type="button" onClick={() => setShowVisuals(!showVisuals)}
+                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${showVisuals ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-slate-500 hover:bg-white/5"}`}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                  {showVisuals ? "Visuals on" : "Visuals off"}
+                </button>
                 <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="btn-gradient px-7 py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 whitespace-nowrap disabled:shadow-none">{notes ? "Regenerate" : "Generate Notes"}</button>
               </div>
             </div>
@@ -440,9 +451,14 @@ export default function Home() {
               {(heroImage || heroImageLoading) && (
                 <div className="relative w-full h-48 sm:h-60 bg-slate-800/50 overflow-hidden">
                   {heroImage ? <img src={heroImage} alt={notes.title} className="w-full h-full object-cover animate-fadeIn" /> : (
-                    <div className="w-full h-full flex items-center justify-center"><div className="flex items-center gap-2 text-slate-500 text-sm"><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Generating illustration...</div></div>
+                    <div className="w-full h-full flex items-center justify-center"><div className="flex items-center gap-2 text-slate-500 text-sm"><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Finding image...</div></div>
                   )}
                   {heroImage && <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a1a]/80 via-transparent to-transparent" />}
+                  {heroImage && heroSource && (
+                    <span className={`absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full backdrop-blur-md ${heroSource === "web" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-violet-500/20 text-violet-300 border border-violet-500/30"}`}>
+                      {heroSource === "web" ? "📸 Unsplash" : "🎨 AI Generated"}
+                    </span>
+                  )}
                 </div>
               )}
               <div className="p-5 sm:p-6">
@@ -457,12 +473,18 @@ export default function Home() {
                       ))}
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 no-print">
+                  <div className="flex flex-wrap gap-2 no-print items-center">
+                    {/* Prominent Ask AI button */}
+                    <button onClick={() => setChatOpen(!chatOpen)}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 shadow-lg ${chatOpen ? "bg-violet-500 text-white border-violet-400 shadow-violet-500/30" : "bg-gradient-to-r from-violet-500 to-indigo-500 text-white border-violet-500/50 shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02]"}`}>
+                      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                      Ask AI
+                    </button>
+                    {/* Other buttons */}
                     {[
                       { onClick: () => setEditMode(!editMode), label: editMode ? "Editing" : "Edit", cls: editMode ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-white/5 text-slate-300 border-white/10 hover:bg-white/10", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
                       { onClick: handleDownloadWord, label: downloading ? "..." : "Word", cls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30", icon: "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", disabled: downloading },
                       { onClick: handleShare, label: copied ? "Copied!" : "Share", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30", icon: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" },
-                      { onClick: () => setChatOpen(!chatOpen), label: "Ask AI", cls: chatOpen ? "bg-violet-500 text-white border-violet-500/50" : "bg-violet-500/20 text-violet-400 border-violet-500/30 hover:bg-violet-500/30", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
                       { onClick: () => setShowToc(!showToc), label: "TOC", cls: showToc ? "bg-cyan-500 text-white border-cyan-500/50" : "bg-cyan-500/20 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/30", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
                     ].map(({ onClick, label, cls, icon, disabled }) => (
                       <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
