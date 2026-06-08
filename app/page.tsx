@@ -454,10 +454,8 @@ export default function Home() {
                     <div className="w-full h-full flex items-center justify-center"><div className="flex items-center gap-2 text-slate-500 text-sm"><svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>Finding image...</div></div>
                   )}
                   {heroImage && <div className="absolute inset-0 bg-gradient-to-t from-[#0a0a1a]/80 via-transparent to-transparent" />}
-                  {heroImage && heroSource && (
-                    <span className={`absolute top-3 right-3 text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full backdrop-blur-md ${heroSource === "web" ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-violet-500/20 text-violet-300 border border-violet-500/30"}`}>
-                      {heroSource === "web" ? "📸 Unsplash" : "🎨 AI Generated"}
-                    </span>
+                  {heroImage && heroSource === "web" && (
+                    <span className="absolute bottom-3 right-3 text-[10px] font-medium text-white/40 tracking-wide">Photo via Unsplash</span>
                   )}
                 </div>
               )}
