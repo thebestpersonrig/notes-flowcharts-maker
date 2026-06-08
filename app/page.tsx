@@ -126,7 +126,6 @@ export default function Home() {
 
   const [compareMode, setCompareMode] = useState(false);
   const [compareTopic, setCompareTopic] = useState("");
-  const [showToc, setShowToc] = useState(false);
 
   const resultsRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -212,7 +211,7 @@ export default function Home() {
     finally { setLoading(false); }
   }
 
-  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setCompareMode(false); setCompareTopic(""); setShowToc(false); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setCompareMode(false); setCompareTopic(""); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   async function generateHeroImage(title: string) {
     setHeroImageLoading(true); setHeroSource(null);
@@ -465,11 +464,6 @@ export default function Home() {
                     <p className="text-indigo-400 text-xs font-semibold uppercase tracking-wider mb-2">Generated Notes</p>
                     {editMode ? <input value={notes.title} onChange={e => updateNotes(n => ({ ...n, title: e.target.value }))} className="text-2xl font-bold bg-transparent border-b-2 border-indigo-500 text-white focus:outline-none w-full" />
                       : <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white leading-tight">{notes.title}</h2>}
-                    <div className="flex flex-wrap gap-3 mt-3">
-                      {[{ n: notes.sections.length, l: "sections" }, { n: notes.key_terms?.length || 0, l: "terms" }, { n: notes.practice_problems?.length || 0, l: "problems" }].map(({ n, l }) => (
-                        <span key={l} className="text-xs text-slate-400 bg-white/5 px-2.5 py-1 rounded-lg">{n} {l}</span>
-                      ))}
-                    </div>
                   </div>
                   <div className="flex flex-wrap gap-2 no-print items-center">
                     {/* Prominent Ask AI button */}
@@ -483,7 +477,6 @@ export default function Home() {
                       { onClick: () => setEditMode(!editMode), label: editMode ? "Editing" : "Edit", cls: editMode ? "bg-amber-500/20 text-amber-400 border-amber-500/30" : "bg-white/5 text-slate-300 border-white/10 hover:bg-white/10", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" },
                       { onClick: handleDownloadWord, label: downloading ? "..." : "Word", cls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30", icon: "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", disabled: downloading },
                       { onClick: handleShare, label: copied ? "Copied!" : "Share", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30", icon: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" },
-                      { onClick: () => setShowToc(!showToc), label: "TOC", cls: showToc ? "bg-cyan-500 text-white border-cyan-500/50" : "bg-cyan-500/20 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/30", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
                     ].map(({ onClick, label, cls, icon, disabled }) => (
                       <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
@@ -538,17 +531,12 @@ export default function Home() {
             )}
 
             {/* ─── Table of Contents ─────────────────────────────── */}
-            {showToc && activeTab === "notes" && (
-              <div className="glass rounded-2xl p-4 animate-scaleIn no-print" style={{ border: "1px solid rgba(34,211,238,0.15)" }}>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                    Table of Contents
-                  </h3>
-                  <button onClick={() => setShowToc(false)} className="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
-                </div>
+            {activeTab === "notes" && (
+              <div className="glass rounded-2xl p-4 animate-fadeInUp no-print" style={{ border: "1px solid rgba(34,211,238,0.15)" }}>
+                <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                  Table of Contents
+                </h3>
                 <nav className="space-y-0.5">
                   <button onClick={() => scrollToSection("overview")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Overview

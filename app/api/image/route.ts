@@ -4,8 +4,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 async function searchUnsplash(topic: string, accessKey: string): Promise<string | null> {
   try {
+    const query = `${topic} educational diagram infographic`;
     const res = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(topic)}&per_page=5&orientation=landscape`,
+      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=5&orientation=landscape`,
       { headers: { Authorization: `Client-ID ${accessKey}` }, signal: AbortSignal.timeout(8000) }
     );
     if (!res.ok) return null;
