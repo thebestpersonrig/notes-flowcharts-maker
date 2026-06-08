@@ -394,26 +394,40 @@ export default function Home() {
                   )}
                 </div>
               )}
-              <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center pt-1">
-                <button type="button" onClick={addTopic} className="text-indigo-500 dark:text-indigo-400 text-sm font-medium hover:text-indigo-400 transition flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add topic
-                </button>
-                <div className="flex-1" />
-                <select value={grade} onChange={e => setGrade(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
-                  <option value="">Grade (optional)</option>
-                  {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
-                </select>
-                <select value={length} onChange={e => setLength(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
-                  <option value="short">Short</option>
-                  <option value="medium">Medium</option>
-                  <option value="detailed">Detailed</option>
-                </select>
-                <button type="button" onClick={() => setShowVisuals(!showVisuals)}
-                  className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${showVisuals ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-slate-500 hover:bg-white/5"}`}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                  {showVisuals ? "Visuals on" : "Visuals off"}
-                </button>
-                <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="btn-gradient px-7 py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 whitespace-nowrap disabled:shadow-none">{notes ? "Regenerate" : "Generate Notes"}</button>
+              <div className="flex flex-col gap-3 pt-1">
+                {/* Options row */}
+                <div className="flex flex-wrap gap-2.5 items-center">
+                  <button type="button" onClick={addTopic} className="text-indigo-500 dark:text-indigo-400 text-sm font-medium hover:text-indigo-400 transition flex items-center gap-1">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>Add topic
+                  </button>
+                  <div className="flex-1" />
+                  {/* Grade pill selector */}
+                  <select value={grade} onChange={e => setGrade(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
+                    <option value="">Grade (optional)</option>
+                    {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
+                  </select>
+                  {/* Length segmented control */}
+                  <div className="flex rounded-xl border border-white/10 overflow-hidden bg-white/5">
+                    {([
+                      { value: "short", label: "Short", icon: "⚡" },
+                      { value: "medium", label: "Medium", icon: "📄" },
+                      { value: "detailed", label: "Detailed", icon: "📚" },
+                    ] as const).map(opt => (
+                      <button key={opt.value} type="button" onClick={() => setLength(opt.value)}
+                        className={`flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium transition-all ${length === opt.value ? "bg-indigo-500/20 text-indigo-400 shadow-inner" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"}`}>
+                        <span className="text-xs">{opt.icon}</span>{opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Visuals toggle */}
+                  <button type="button" onClick={() => setShowVisuals(!showVisuals)}
+                    className={`flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${showVisuals ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-slate-500 hover:bg-white/5"}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    {showVisuals ? "Visuals on" : "Visuals off"}
+                  </button>
+                </div>
+                {/* Generate button — full width */}
+                <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="btn-gradient w-full py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 disabled:shadow-none text-center">{notes ? "Regenerate" : "Generate Notes"}</button>
               </div>
             </div>
           </form>
