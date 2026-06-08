@@ -36,7 +36,7 @@ Rules:
 - Format your response in plain text (no markdown headers, no bullet symbols)`;
 
     const completion = await client.chat.completions.create({
-      model: "openrouter/auto",
+      model: "google/gemma-4-31b-it:free",
       max_tokens: 1500,
       messages: [
         { role: "system", content: systemPrompt },

@@ -318,7 +318,7 @@ OUTPUT RULES:
     }
 
     const message = await client.chat.completions.create({
-      model: "openrouter/auto",
+      model: "google/gemma-4-31b-it:free",
       max_tokens: finalMaxTokens,
       messages,
     });
