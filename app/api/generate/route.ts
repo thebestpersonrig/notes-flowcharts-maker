@@ -1,6 +1,146 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
+// ─── Per-template system prompts ─────────────────────────────────────────────
+
+const TEMPLATE_PROMPTS: Record<string, { system: string; maxTokens: number }> = {
+  study: {
+    system: `You are a world-class educator writing comprehensive study notes. Your goal is to make the student deeply UNDERSTAND the topic, not just memorize it.
+
+WRITING STYLE:
+- Open each section with a hook — a surprising fact, a "why this matters" statement, or a thought-provoking question
+- Explain concepts by building from what students already know to what's new
+- Use the "explain, illustrate, apply" pattern: explain the concept, give a vivid example, then show how to use it
+- Write in an engaging, conversational-but-authoritative tone — like a brilliant tutor, not a textbook
+- Every paragraph should teach ONE clear idea
+- Use specific numbers, names, and real-world details — never be vague
+- Connect ideas across sections so the student sees the big picture`,
+    maxTokens: 8000,
+  },
+
+  cheatsheet: {
+    system: `You are creating a dense, exam-ready cheat sheet. This is what a student tapes to their wall the night before a test.
+
+WRITING STYLE:
+- Ruthlessly concise — every word must earn its place
+- Use bullet fragments, not full sentences: "Mitosis = cell division → 2 identical daughter cells"
+- Lead with formulas, definitions, and rules — the stuff that's easy to forget
+- Group related facts together under clear headers
+- Include mnemonic devices and memory tricks wherever possible (e.g., "ROY G. BIV", "King Philip Came Over For Good Spaghetti")
+- Add quick "watch out!" warnings for common exam traps
+- If there are formulas, show them with variable labels
+- 2-3 sections max — keep it SHORT and scannable
+- Fewer subsections, more key_points per section
+- Practice problems should be rapid-fire, exam-style questions`,
+    maxTokens: 4000,
+  },
+
+  revision: {
+    system: `You are writing a quick revision guide for a student reviewing the night before an exam. Speed and clarity are everything.
+
+WRITING STYLE:
+- Structure like a "greatest hits" — only the most important, most testable content
+- Start each section with a one-sentence "the single most important thing to know here is..."
+- Use simple, punchy language — short sentences, active voice
+- Include "If you remember ONE thing..." callouts
+- Add "Exam tip:" notes for likely test questions and how to approach them
+- Memory tricks and acronyms for anything that requires memorization
+- Quick self-test questions at the end of each section
+- 3-4 sections covering the core material
+- Practice problems should mimic actual exam questions`,
+    maxTokens: 5000,
+  },
+
+  deepdive: {
+    system: `You are a subject-matter expert writing an advanced deep dive for someone who wants genuine mastery — not just a passing grade.
+
+WRITING STYLE:
+- Go beyond surface-level: explore WHY things work, not just WHAT they are
+- Include historical context — who discovered this, what problem were they solving, what came before
+- Discuss edge cases, exceptions, and "yes, but..." nuances that separate experts from beginners
+- Present competing theories or interpretations where they exist
+- Connect to adjacent fields and interdisciplinary insights
+- Use precise technical language but define it clearly
+- Include "Advanced insight:" callouts for particularly subtle points
+- 5-7 substantial sections with multiple subsections each
+- Practice problems should require synthesis and critical thinking, not just recall
+- Examples should be complex, real-world scenarios`,
+    maxTokens: 10000,
+  },
+
+  research: {
+    system: `You are an academic researcher helping a student build a well-argued essay or research paper on this topic.
+
+WRITING STYLE:
+- Structure around ARGUMENTS and ANALYSIS, not just description
+- Each section should present a thesis or line of reasoning, not just facts
+- Include multiple perspectives and counterarguments — show intellectual depth
+- Reference specific studies, papers, events, and thinkers (use real ones)
+- Use academic language: "This suggests...", "Evidence indicates...", "Scholars debate whether..."
+- Highlight areas of controversy or ongoing debate in the field
+- Include "Argument:" and "Counter-argument:" pairs
+- Provide quotable insights and statistics a student could use in an essay
+- Further reading should be specific: real books, real papers, real authors
+- Practice problems should be essay-style prompts and critical thinking questions`,
+    maxTokens: 8000,
+  },
+
+  eli5: {
+    system: `You are explaining this topic to someone with ZERO background knowledge. Make it absurdly simple and fun.
+
+WRITING STYLE:
+- Explain like you're talking to a curious 5-year-old (but a smart one)
+- Use everyday analogies for EVERYTHING: "DNA is like a recipe book for your body"
+- Avoid ALL jargon — if you must use a technical term, immediately explain it in simple words
+- Use "Imagine..." and "Think of it like..." constantly
+- Short paragraphs, simple sentences, lots of comparisons to everyday life
+- Make it fun and engaging — use humor, surprising facts, and "wow" moments
+- "Did you know?" callouts for mind-blowing facts
+- 3-4 sections, each explaining one big idea very simply
+- Key terms should have the simplest possible definitions
+- Examples should use things everyone knows: food, sports, games, animals, school
+- Practice problems should be fun thought experiments, not intimidating questions`,
+    maxTokens: 5000,
+  },
+
+  cornell: {
+    system: `You are creating study material structured in the Cornell Notes format — the most effective note-taking method for active learning and review.
+
+WRITING STYLE:
+- Each section represents a "page" of Cornell Notes
+- Key points should be written as QUESTIONS (the "cue column") — e.g., "What causes tides?" not "Tides are caused by..."
+- Content in each section is the detailed answer to those questions
+- The section's tldr serves as the "summary" at the bottom of each Cornell page
+- Subsections break down complex answers into digestible parts
+- Include review questions that test recall: "Cover the right side and try to answer using only the cue questions"
+- Connections field should link to other sections: "This relates to Section 2 because..."
+- Practice problems should be self-test questions written in the cue-question style
+- 4-6 sections, each organized as a clear question-and-answer unit
+- Key terms should be formatted as "Term → Definition" pairs for quick review`,
+    maxTokens: 7000,
+  },
+
+  lecture: {
+    system: `You are a university lecturer preparing organized, engaging class notes that follow a logical teaching progression.
+
+WRITING STYLE:
+- Structure like an actual lecture: introduction → core concepts → worked examples → deeper implications → recap
+- Open with "Today we're going to learn..." framing — set expectations up front
+- Build concepts sequentially — each section should build on the previous one
+- Include "Let's pause here" moments to check understanding
+- Use transitional phrases: "Now that we understand X, let's see how it connects to Y..."
+- Include worked examples that walk through problems step-by-step (show your work)
+- Add "Common student question:" callouts for things students typically ask
+- End each section with a brief recap before moving on
+- 4-6 sections following a clear narrative arc
+- Practice problems should escalate in difficulty: one easy, one medium, one hard
+- Write as if you're speaking to students — warm, encouraging, but rigorous`,
+    maxTokens: 8000,
+  },
+};
+
+// ─── Route handler ───────────────────────────────────────────────────────────
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -16,7 +156,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, detailLevel = "detailed", grade, template = "study" } = await req.json();
+    const { topic, grade, template = "study" } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -25,132 +165,121 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const tmpl = TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
+
     // Build grade-aware instructions
     let gradeInstruction = "";
     if (grade) {
       const gradeLabel = grade === "college" ? "college/university" : `grade ${grade}`;
       gradeInstruction = `
 CRITICAL — GRADE ADAPTATION:
-The student is in ${gradeLabel}. You MUST adapt ALL explanations to their level:
-- Use vocabulary and sentence complexity appropriate for a ${gradeLabel} student.
-- If this topic is normally taught at a HIGHER grade level, break it down using simpler concepts they already know. Build up from fundamentals. Use step-by-step reasoning. Don't assume prerequisite knowledge they haven't learned yet.
-- If this topic is normally taught at a LOWER grade level, you can be more concise and add deeper insights, connections to advanced topics, and nuance.
-- Analogies should reference things a ${gradeLabel} student would relate to (school life, everyday experiences, pop culture).
-- Practice problems should be solvable at the ${gradeLabel} level.
-- For math/science: show worked-out steps appropriate for their level. Don't skip steps they wouldn't understand.
+The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
+- Vocabulary, sentence complexity, and conceptual depth must match a ${gradeLabel} student
+- If this topic is above their level, build up from fundamentals they already know — don't assume prerequisites
+- If below their level, be concise and add deeper connections
+- Analogies should reference things a ${gradeLabel} student relates to
+- Practice problems must be solvable at their level
+- For math/science: show worked-out steps appropriate for their level
 `;
     }
 
-    // Template-specific tone adjustments
-    const templateTone: Record<string, string> = {
-      study: "",
-      cheatsheet: "\nTEMPLATE: EXAM CHEAT SHEET\nWrite in a quick-reference style. Use bullet points, short phrases, and mnemonic devices. Focus on facts, formulas, and definitions that are likely to appear on an exam. Skip lengthy explanations — prioritize density of information.",
-      research: "\nTEMPLATE: ESSAY RESEARCH\nWrite in an analytical, academic tone. Include thesis-worthy arguments, counterpoints, evidence, and citations-style references. Focus on analysis, not just description. Each section should present a line of reasoning.",
-      revision: "\nTEMPLATE: QUICK REVISION\nWrite for a student reviewing the night before. Hit the essentials fast. Use simple language, clear formatting, and highlight what's most likely to be tested. Include memory tricks.",
-      deepdive: "\nTEMPLATE: DEEP DIVE\nGo beyond surface-level. Explore edge cases, historical context, competing theories, and nuanced details. Assume the reader already knows the basics and wants mastery.",
-    };
+    const prompt = `${tmpl.system}
 
-    const detailMap: Record<string, string> = {
-      summary: "summary = short, concise overview hitting only the most important points. 2-3 sections max, shorter content, fewer subsections. Think quick study reference card.",
-      brief: "brief = moderate overview covering main ideas with some depth",
-      detailed: "detailed = full, comprehensive depth with thorough explanations",
-      expert: "expert = advanced nuance, edge cases, deeper analysis for someone who wants mastery",
-    };
-
-    const prompt = `You are an expert educator and technical writer. Create comprehensive notes on: "${topic}".
-
-Detail level: ${detailMap[detailLevel] || detailMap.detailed}
-${templateTone[template] || ""}
+TOPIC: "${topic}"
 ${gradeInstruction}
 
-Return ONLY valid JSON (no markdown, no code fences):
+Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
 {
-  "title": "Descriptive title",
-  "overview": "2-3 rich paragraphs",
+  "title": "A compelling, descriptive title for these notes",
+  "overview": "2-3 paragraphs introducing the topic. Hook the reader immediately — why does this topic matter? What will they learn? Make it engaging, not dry.",
   "sections": [
     {
       "title": "Section Title",
-      "tldr": "One-line summary of this section",
+      "tldr": "One crisp sentence summarizing this section's key takeaway",
       "difficulty": "beginner | intermediate | advanced",
-      "content": "Detailed paragraph",
-      "key_points": ["Point 1", "Point 2", "Point 3"],
-      "examples": ["A specific real-world example with context and detail"],
-      "connections": "How this section connects to other concepts or sections",
-      "subsections": [{"title": "...", "content": "Detailed paragraph"}]
+      "content": "A thorough, well-written paragraph (or two) explaining the core idea. Be specific. Use concrete details, not vague generalities.",
+      "key_points": ["Each point should be a complete, useful thought — not a fragment", "Include enough detail to be useful on its own", "3-5 points per section"],
+      "examples": ["A SPECIFIC real-world example with names, numbers, or concrete details — not 'for example, some companies use this'"],
+      "connections": "How this connects to other sections, related concepts, or the bigger picture",
+      "subsections": [{"title": "Subtopic", "content": "Detailed explanation"}]
     }
   ],
   "common_misconceptions": [
-    {"misconception": "What people wrongly believe", "reality": "The actual truth with explanation"}
+    {"misconception": "State what people commonly get wrong", "reality": "Explain the truth clearly and why the misconception exists"}
   ],
   "analogies": [
-    {"concept": "Technical concept", "analogy": "Everyday comparison", "explanation": "Why this analogy works"}
+    {"concept": "The technical concept", "analogy": "A vivid everyday comparison", "explanation": "Why this analogy captures the essence of the concept"}
   ],
   "pros_cons": {
     "applicable": false,
-    "context": "What is being compared or evaluated",
-    "pros": ["Advantage 1"],
-    "cons": ["Disadvantage 1"]
+    "context": "What's being evaluated (only if the topic involves genuine tradeoffs)",
+    "pros": ["Specific advantage with explanation"],
+    "cons": ["Specific disadvantage with explanation"]
   },
   "timeline": {
     "applicable": false,
-    "events": [{"year": "Year or period", "event": "What happened", "significance": "Why it matters"}]
+    "events": [{"year": "Year", "event": "What happened", "significance": "Why it matters to this topic"}]
   },
   "process_flow": {
     "applicable": false,
-    "title": "How [Topic] Works",
-    "steps": [{"step": 1, "title": "Step name", "description": "What happens and why"}]
+    "title": "How [Process] Works",
+    "steps": [{"step": 1, "title": "Step name", "description": "What happens and why it matters"}]
   },
   "practice_problems": [
-    {"problem": "A thought-provoking question", "hint": "A helpful hint", "answer": "The full answer with explanation"}
+    {"problem": "A thoughtful question that tests genuine understanding", "hint": "A useful nudge toward the answer", "answer": "A complete, well-explained answer"}
   ],
   "key_terms": [
-    {"term": "Term", "definition": "Clear definition"}
+    {"term": "Term", "definition": "A clear, complete definition — not just 2 words"}
   ],
-  "summary": "A thorough summary tying everything together",
-  "further_reading": ["Specific book or resource 1"]
+  "summary": "A satisfying wrap-up that ties everything together and reinforces the most important ideas",
+  "further_reading": ["Specific book/resource/topic title for further learning"]
 }
 
-CRITICAL RULES:
-- For "summary" detail level: 2-3 sections, 2-3 key_points each, 1 example each, 0-1 subsections. Keep everything short and punchy.
-- For other levels: 4-7 sections, each with: 3+ key_points, 1-2 specific examples, 1-3 subsections, a tldr, difficulty level, connections
-- 3-5 common_misconceptions with detailed reality corrections
-- 3-5 analogies using everyday objects/experiences
-- pros_cons: set applicable=true ONLY if the topic genuinely involves choices, tradeoffs, or competing approaches. Leave false for pure knowledge topics.
-- timeline: set applicable=true ONLY if the topic has meaningful historical development. Leave false for abstract/technical concepts.
-- process_flow: set applicable=true ONLY if the topic involves a clear sequential process or workflow. Leave false for descriptive/conceptual topics.
-- 3-5 practice_problems that test understanding, not just recall
-- 8-12 key_terms (5-8 for summary)
-- Make examples SPECIFIC (real companies, real events, real numbers), not generic
-- Content must be genuinely educational and accurate
-- If a grade level is specified, EVERY piece of content must be understandable by that grade level. This is the #1 priority.`;
+OUTPUT RULES:
+- pros_cons.applicable = true ONLY if the topic genuinely involves choices or tradeoffs. False for pure knowledge topics.
+- timeline.applicable = true ONLY if the topic has real historical development. False for abstract concepts.
+- process_flow.applicable = true ONLY if there's a clear sequential process. False for descriptive topics.
+- 3-5 common_misconceptions — things people ACTUALLY get wrong, not made-up ones
+- 3-5 analogies using everyday objects and experiences people can instantly picture
+- 3-5 practice_problems that test UNDERSTANDING, not just recall
+- 8-15 key_terms with real, useful definitions
+- Make examples SPECIFIC: use real companies, real events, real numbers, real people — not "for example, a company might..."
+- Every piece of content must be factually accurate
+- If a grade level is specified, EVERY piece of content must be appropriate for that level — this overrides everything else`;
 
     const message = await client.chat.completions.create({
       model: "openrouter/auto",
-      max_tokens: detailLevel === "summary" ? 4000 : 8000,
+      max_tokens: tmpl.maxTokens,
       messages: [{ role: "user", content: prompt }],
     });
 
     const raw = message.choices[0].message.content ?? "";
 
-    // Strip markdown code fences if present
-    const cleaned = raw
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
+    // Strip markdown code fences if present, and extract JSON robustly
+    let cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
-    } catch (err) {
-      console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
-      return NextResponse.json(
-        {
-          error:
-            "Failed to parse AI response: " +
-            (err instanceof Error ? err.message : String(err)),
-        },
-        { status: 500 }
-      );
+    } catch {
+      // Try to extract JSON object from the response
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (!match) {
+        console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
+        return NextResponse.json(
+          { error: "Failed to parse AI response. Please try again." },
+          { status: 500 }
+        );
+      }
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch (err) {
+        console.error("JSON fallback parse failed:", err);
+        return NextResponse.json(
+          { error: "Failed to parse AI response. Please try again." },
+          { status: 500 }
+        );
+      }
     }
 
     return NextResponse.json(parsed);

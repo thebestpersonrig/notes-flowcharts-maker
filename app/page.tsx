@@ -40,8 +40,6 @@ interface NotesContent {
 interface HistoryItem { id: string; title: string; date: string; notes: NotesContent }
 interface ChatMessage { role: "user" | "assistant"; content: string }
 
-type DetailLevel = "summary" | "brief" | "detailed" | "expert";
-
 const DIFF_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   beginner:     { bg: "bg-emerald-500/10", text: "text-emerald-400", label: "Beginner" },
   intermediate: { bg: "bg-amber-500/10", text: "text-amber-400", label: "Intermediate" },
@@ -50,14 +48,17 @@ const DIFF_COLORS: Record<string, { bg: string; text: string; label: string }> =
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
-interface Template { id: string; label: string; icon: string; desc: string; detail: DetailLevel }
+interface Template { id: string; label: string; icon: string; desc: string }
 
 const TEMPLATES: Template[] = [
-  { id: "study",     label: "Study Notes",      icon: "📖", desc: "Comprehensive study material",      detail: "detailed" },
-  { id: "cheatsheet",label: "Exam Cheat Sheet",  icon: "📋", desc: "Quick-reference key facts",         detail: "summary" },
-  { id: "research",  label: "Essay Research",     icon: "🔬", desc: "In-depth analysis & sources",       detail: "expert" },
-  { id: "revision",  label: "Quick Revision",     icon: "⚡", desc: "Fast recap before a test",          detail: "brief" },
-  { id: "deepdive",  label: "Deep Dive",          icon: "🧠", desc: "Expert-level mastery content",      detail: "expert" },
+  { id: "study",       label: "Study Notes",       icon: "📖", desc: "Comprehensive notes for learning" },
+  { id: "cheatsheet",  label: "Cheat Sheet",       icon: "📋", desc: "Quick-reference key facts & formulas" },
+  { id: "revision",    label: "Quick Revision",    icon: "⚡", desc: "Fast recap before a test" },
+  { id: "deepdive",    label: "Deep Dive",         icon: "🧠", desc: "Expert-level mastery content" },
+  { id: "research",    label: "Essay Research",     icon: "🔬", desc: "Analysis, arguments & sources" },
+  { id: "eli5",        label: "ELI5",              icon: "🧒", desc: "Explain like I'm five" },
+  { id: "cornell",     label: "Cornell Notes",     icon: "📝", desc: "Structured Q&A study format" },
+  { id: "lecture",     label: "Lecture Notes",      icon: "🎓", desc: "Organized class-style notes" },
 ];
 
 const GRADES = [
@@ -92,7 +93,6 @@ function FormattedText({ text, className = "" }: { text: string; className?: str
 export default function Home() {
   const [topics, setTopics] = useState<string[]>([""]);
   const [grade, setGrade] = useState("");
-  const [detailLevel, setDetailLevel] = useState<DetailLevel>("detailed");
   const [template, setTemplate] = useState("study");
   const [loading, setLoading] = useState(false);
   const [notes, setNotes] = useState<NotesContent | null>(null);
@@ -142,8 +142,7 @@ export default function Home() {
   const removeTopic = (i: number) => setTopics(p => p.filter((_, idx) => idx !== i));
   const updateTopic = (i: number, v: string) => setTopics(p => p.map((t, idx) => idx === i ? v : t));
 
-  function selectTemplate(t: Template) { setTemplate(t.id); setDetailLevel(t.detail); }
-  function handleDetailLevelChange(lvl: DetailLevel) { setDetailLevel(lvl); const cur = TEMPLATES.find(t => t.id === template); if (cur && cur.detail !== lvl) setTemplate(""); }
+  function selectTemplate(t: Template) { setTemplate(t.id); }
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -151,7 +150,7 @@ export default function Home() {
     if (!combined) return;
     setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null);
     try {
-      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, detailLevel, template: template || undefined, grade: grade || undefined }) });
+      const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: combined, template: template || "study", grade: grade || undefined }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
@@ -267,7 +266,7 @@ export default function Home() {
 
         {/* ─── Templates ─────────────────────────────────────── */}
         {!notes && !loading && (
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-5 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-5 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
             {TEMPLATES.map(t => (
               <button key={t.id} type="button" onClick={() => selectTemplate(t)} className={`flex flex-col items-center gap-1.5 p-4 rounded-2xl border transition-all duration-200 ${template === t.id ? "border-indigo-500/50 bg-indigo-500/10 glow-violet scale-[1.02]" : "glass hover:bg-white/10 hover:scale-[1.01]"}`}>
                 <span className="text-2xl">{t.icon}</span>
@@ -297,11 +296,9 @@ export default function Home() {
                   <option value="">Grade (optional)</option>
                   {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                 </select>
-                <div className="flex gap-1.5 flex-wrap">
-                  {(["summary", "brief", "detailed", "expert"] as DetailLevel[]).map(lvl => (
-                    <button key={lvl} type="button" onClick={() => handleDetailLevelChange(lvl)} className={`px-3.5 py-2.5 rounded-xl text-sm font-medium capitalize transition-all ${detailLevel === lvl ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" : "bg-white/5 text-slate-500 dark:text-slate-400 hover:bg-white/10 hover:text-slate-300"}`}>{lvl}</button>
-                  ))}
-                </div>
+                <select value={template} onChange={e => setTemplate(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-slate-700 dark:text-slate-300 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 cursor-pointer transition">
+                  {TEMPLATES.map(t => <option key={t.id} value={t.id}>{t.icon} {t.label}</option>)}
+                </select>
                 <button type="submit" disabled={loading || !topics.some(t => t.trim())} className="btn-gradient px-7 py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 whitespace-nowrap disabled:shadow-none">{notes ? "Regenerate" : "Generate Notes"}</button>
               </div>
             </div>
