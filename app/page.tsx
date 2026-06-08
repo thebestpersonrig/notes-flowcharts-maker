@@ -122,8 +122,17 @@ export default function Home() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareTopic, setCompareTopic] = useState("");
+  const [showToc, setShowToc] = useState(false);
+
   const resultsRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasFlowchart = notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0;
+
+  function scrollToSection(id: string) {
+    sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   // ─── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => { const s = localStorage.getItem("noteforge-theme") || "dark"; setTheme(s as "dark"|"light"); document.documentElement.classList.toggle("dark", s === "dark"); }, []);
@@ -182,7 +191,9 @@ export default function Home() {
     if (!combined) return;
     setLoading(true); setError(""); setNotes(null); setEditMode(false); setActiveTab("notes"); setRevealedAnswers(new Set()); setRevealedHints(new Set()); setChatMessages([]); setHeroImage(null);
     try {
-      const body: Record<string, unknown> = { topic: combined, template: template || "study", grade: grade || undefined };
+      const finalTopic = compareMode && compareTopic.trim() ? `${combined} vs ${compareTopic.trim()}` : combined;
+      const body: Record<string, unknown> = { topic: finalTopic, template: template || "study", grade: grade || undefined };
+      if (compareMode && compareTopic.trim()) body.compare = true;
       if (attachment) { body.file = { name: attachment.name, base64: attachment.base64, mime: attachment.mime }; }
       const res = await fetch("/api/generate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = await res.json();
@@ -190,11 +201,16 @@ export default function Home() {
       setNotes(data); setActiveSection(0); saveToHistory(data);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
       generateHeroImage(data.title);
-    } catch (err) { setError(err instanceof Error ? err.message : "Something went wrong"); }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429") || msg.toLowerCase().includes("too many")) {
+        setError("Rate limited — too many requests. Please wait a minute and try again.");
+      } else { setError(msg); }
+    }
     finally { setLoading(false); }
   }
 
-  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  function handleNewNotes() { setNotes(null); setError(""); setEditMode(false); setChatOpen(false); setChatMessages([]); setHeroImage(null); setAttachment(null); setCompareMode(false); setCompareTopic(""); setShowToc(false); setRevealedAnswers(new Set()); setRevealedHints(new Set()); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
   async function generateHeroImage(title: string) { setHeroImageLoading(true); try { const r = await fetch("/api/image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: title }) }); const d = await r.json(); if (r.ok && d.url) setHeroImage(d.url); } catch { /* */ } finally { setHeroImageLoading(false); } }
 
@@ -321,6 +337,19 @@ export default function Home() {
                   {topics.length > 1 && <button type="button" onClick={() => removeTopic(i)} className="px-3 text-slate-400 hover:text-rose-400 transition"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>}
                 </div>
               ))}
+              {/* Compare mode */}
+              {!notes && (
+                <div className="flex items-center gap-3">
+                  <button type="button" onClick={() => setCompareMode(!compareMode)}
+                    className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all border ${compareMode ? "border-amber-500/40 bg-amber-500/10 text-amber-400" : "border-white/10 text-slate-400 hover:bg-white/5 hover:text-slate-300"}`}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>
+                    Compare
+                  </button>
+                  {compareMode && (
+                    <input type="text" value={compareTopic} onChange={e => setCompareTopic(e.target.value)} placeholder="Compare with... e.g. Meiosis" className="flex-1 bg-white/5 border border-amber-500/20 rounded-xl px-4 py-2.5 text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/30 transition text-sm" />
+                  )}
+                </div>
+              )}
               {/* File attachment */}
               {!notes && (
                 <div
@@ -434,6 +463,7 @@ export default function Home() {
                       { onClick: handleDownloadWord, label: downloading ? "..." : "Word", cls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30", icon: "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", disabled: downloading },
                       { onClick: handleShare, label: copied ? "Copied!" : "Share", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30", icon: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" },
                       { onClick: () => setChatOpen(!chatOpen), label: "Ask AI", cls: chatOpen ? "bg-violet-500 text-white border-violet-500/50" : "bg-violet-500/20 text-violet-400 border-violet-500/30 hover:bg-violet-500/30", icon: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" },
+                      { onClick: () => setShowToc(!showToc), label: "TOC", cls: showToc ? "bg-cyan-500 text-white border-cyan-500/50" : "bg-cyan-500/20 text-cyan-400 border-cyan-500/30 hover:bg-cyan-500/30", icon: "M4 6h16M4 10h16M4 14h16M4 18h16" },
                     ].map(({ onClick, label, cls, icon, disabled }) => (
                       <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
@@ -487,6 +517,51 @@ export default function Home() {
               </div>
             )}
 
+            {/* ─── Table of Contents ─────────────────────────────── */}
+            {showToc && activeTab === "notes" && (
+              <div className="glass rounded-2xl p-4 animate-scaleIn no-print" style={{ border: "1px solid rgba(34,211,238,0.15)" }}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                    Table of Contents
+                  </h3>
+                  <button onClick={() => setShowToc(false)} className="text-slate-500 hover:text-white p-1 rounded-lg hover:bg-white/10 transition">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+                <nav className="space-y-0.5">
+                  <button onClick={() => scrollToSection("overview")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Overview
+                  </button>
+                  {notes.sections.map((s, i) => (
+                    <button key={i} onClick={() => { setActiveSection(i); scrollToSection("sections"); }}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition flex items-center gap-2 ${activeSection === i ? "bg-indigo-500/10 text-indigo-400" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${activeSection === i ? "bg-indigo-400" : "bg-slate-600"}`} />
+                      <span className="truncate">{s.title}</span>
+                    </button>
+                  ))}
+                  {notes.common_misconceptions?.length > 0 && (
+                    <button onClick={() => scrollToSection("misconceptions")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 flex-shrink-0" />Misconceptions
+                    </button>
+                  )}
+                  {notes.analogies?.length > 0 && (
+                    <button onClick={() => scrollToSection("analogies")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 flex-shrink-0" />Analogies
+                    </button>
+                  )}
+                  {notes.key_terms?.length > 0 && (
+                    <button onClick={() => scrollToSection("terms")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Key Terms
+                    </button>
+                  )}
+                  <button onClick={() => scrollToSection("summary")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />Summary
+                  </button>
+                </nav>
+              </div>
+            )}
+
             {/* ─── Tabs ──────────────────────────────────────────── */}
             <div className="flex gap-1 glass rounded-2xl p-1.5 no-print animate-fadeInUp" style={{ animationDelay: "100ms" }}>
               {([
@@ -505,15 +580,15 @@ export default function Home() {
             {activeTab === "notes" && (
               <div className="space-y-5 stagger-children tab-content">
                 {/* Overview */}
-                <GlassCard>
+                <div ref={el => { sectionRefs.current["overview"] = el; }}><GlassCard>
                   <SectionTitle><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📋</span>Overview</SectionTitle>
                   <div className="text-slate-600 dark:text-slate-300 leading-relaxed space-y-3">
                     {editMode ? <EditText value={notes.overview} onChange={v => updateNotes(n => ({ ...n, overview: v }))} editMode={editMode} /> : notes.overview.split("\n\n").map((p, i) => <p key={i}>{p}</p>)}
                   </div>
-                </GlassCard>
+                </GlassCard></div>
 
                 {/* Sections */}
-                <GlassCard className="!p-0 overflow-hidden">
+                <div ref={el => { sectionRefs.current["sections"] = el; }}><GlassCard className="!p-0 overflow-hidden">
                   <div className="flex overflow-x-auto border-b border-white/10 scrollbar-none">
                     {notes.sections.map((s, i) => (
                       <button key={i} onClick={() => setActiveSection(i)} className={`px-5 py-3.5 text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${activeSection === i ? "bg-indigo-500/15 text-indigo-400 border-b-2 border-indigo-500" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"}`}>{s.title}</button>
@@ -556,11 +631,11 @@ export default function Home() {
                       </div>
                     );
                   })()}
-                </GlassCard>
+                </GlassCard></div>
 
                 {/* Misconceptions */}
                 {notes.common_misconceptions?.length > 0 && (
-                  <GlassCard>
+                  <div ref={el => { sectionRefs.current["misconceptions"] = el; }}><GlassCard>
                     <SectionTitle color="text-rose-400"><span className="w-7 h-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-sm">⚠️</span>Common Misconceptions</SectionTitle>
                     <div className="space-y-3">{notes.common_misconceptions.map((m, i) => (
                       <div key={i} className="rounded-xl overflow-hidden border border-white/5">
@@ -568,12 +643,12 @@ export default function Home() {
                         <div className="bg-emerald-500/8 px-4 py-3"><p className="text-emerald-300 text-sm flex gap-2"><span>✓</span>{m.reality}</p></div>
                       </div>
                     ))}</div>
-                  </GlassCard>
+                  </GlassCard></div>
                 )}
 
                 {/* Analogies */}
                 {notes.analogies?.length > 0 && (
-                  <GlassCard>
+                  <div ref={el => { sectionRefs.current["analogies"] = el; }}><GlassCard>
                     <SectionTitle color="text-violet-400"><span className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center text-sm">💡</span>Analogies</SectionTitle>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{notes.analogies.map((a, i) => (
                       <div key={i} className="bg-violet-500/5 border border-violet-500/15 rounded-xl p-4 hover:bg-violet-500/10 transition">
@@ -582,7 +657,7 @@ export default function Home() {
                         <p className="text-slate-500 text-xs mt-2 italic">{a.explanation}</p>
                       </div>
                     ))}</div>
-                  </GlassCard>
+                  </GlassCard></div>
                 )}
 
                 {/* Pros & Cons */}
@@ -643,7 +718,7 @@ export default function Home() {
 
                 {/* Key Terms */}
                 {notes.key_terms?.length > 0 && (
-                  <GlassCard>
+                  <div ref={el => { sectionRefs.current["terms"] = el; }}><GlassCard>
                     <SectionTitle><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📚</span>Key Terms</SectionTitle>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{notes.key_terms.map((item, i) => (
                       <div key={i} className="bg-white/3 rounded-xl p-3.5 hover:bg-white/5 transition border border-white/5">
@@ -651,14 +726,14 @@ export default function Home() {
                         <p className="text-slate-400 text-xs mt-1 leading-relaxed">{item.definition}</p>
                       </div>
                     ))}</div>
-                  </GlassCard>
+                  </GlassCard></div>
                 )}
 
                 {/* Summary */}
-                <GlassCard>
+                <div ref={el => { sectionRefs.current["summary"] = el; }}><GlassCard>
                   <SectionTitle><span className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-sm">🎯</span>Summary</SectionTitle>
                   <EditText value={notes.summary} onChange={v => updateNotes(n => ({ ...n, summary: v }))} className="text-slate-300 leading-relaxed" editMode={editMode} />
-                </GlassCard>
+                </GlassCard></div>
 
                 {/* Further Reading */}
                 {notes.further_reading?.length > 0 && (

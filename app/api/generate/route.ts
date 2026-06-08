@@ -156,7 +156,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, grade, template = "study", file } = await req.json();
+    const { topic, grade, template = "study", file, compare } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -191,6 +191,17 @@ The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
 `;
     }
 
+    // Compare mode instruction
+    const compareInstruction = compare ? `
+COMPARE MODE: The topic contains "vs" — the user wants a COMPARISON.
+- Structure sections around DIFFERENCES and SIMILARITIES between the two subjects
+- Use a dedicated section for "Key Differences" and "Key Similarities"
+- pros_cons MUST be applicable — pros/cons of each subject relative to the other
+- Use the same criteria to evaluate both subjects so the comparison is fair
+- Analogies should highlight how the two subjects differ
+- Practice problems should ask students to distinguish between the two
+` : "";
+
     // Handle text file content — decode base64 and include inline
     let fileContext = "";
     const isImage = file?.mime?.startsWith("image/");
@@ -206,7 +217,7 @@ The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
 
     const prompt = `${tmpl.system}
 
-TOPIC: "${topic}"${imageInstruction}${fileContext}
+TOPIC: "${topic}"${imageInstruction}${fileContext}${compareInstruction}
 ${gradeInstruction}
 
 Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
@@ -325,6 +336,12 @@ OUTPUT RULES:
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Generate route error:", msg);
+
+    // Friendly rate limit message
+    if (msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("too many")) {
+      return NextResponse.json({ error: "Rate limited — too many requests. Please wait a minute and try again." }, { status: 429 });
+    }
+
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

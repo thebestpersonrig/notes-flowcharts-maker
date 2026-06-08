@@ -49,6 +49,9 @@ Rules:
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Chat route error:", msg);
+    if (msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("too many")) {
+      return NextResponse.json({ error: "Rate limited — please wait a minute and try again." }, { status: 429 });
+    }
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
