@@ -19,13 +19,8 @@ interface Solution {
 }
 
 const OPERATIONS = [
-  { id: "solve", label: "Solve", icon: "🔍", desc: "Find the value of unknowns" },
-  { id: "simplify", label: "Simplify", icon: "✨", desc: "Reduce to simplest form" },
-  { id: "factor", label: "Factor", icon: "🧩", desc: "Break into factors" },
-  { id: "expand", label: "Expand", icon: "📐", desc: "Multiply out brackets" },
-  { id: "differentiate", label: "Differentiate", icon: "📈", desc: "Find the derivative" },
-  { id: "integrate", label: "Integrate", icon: "📊", desc: "Find the antiderivative" },
-  { id: "evaluate", label: "Evaluate", icon: "🔢", desc: "Calculate the numerical value" },
+  { id: "answer", label: "Answer", icon: "⚡", desc: "Quick answer with key steps" },
+  { id: "explain", label: "Explain", icon: "📝", desc: "Detailed step-by-step explanation" },
 ];
 
 const MATH_CONTROLS = [
@@ -120,7 +115,7 @@ export default function MathSolver() {
     setSolution(null);
 
     try {
-      const opLabel = OPERATIONS.find(o => o.id === opId)?.label || opId;
+      const opLabel = opId;
       const res = await fetch("/api/math", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -269,17 +264,17 @@ export default function MathSolver() {
         {/* Operation Selection */}
         {showOperations && (
           <div className="mb-6 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
-            <p className="text-sm font-semibold text-slate-400 mb-3">What do you want to do with this expression?</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <p className="text-sm font-semibold text-slate-400 mb-3">How would you like the solution?</p>
+            <div className="grid grid-cols-2 gap-3">
               {OPERATIONS.map(op => (
                 <button
                   key={op.id}
                   onClick={() => selectOperation(op.id)}
-                  className="group flex flex-col items-center gap-1.5 p-4 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                  className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
-                  <span className="text-2xl">{op.icon}</span>
-                  <span className="text-sm font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
-                  <span className="text-[11px] text-slate-500 leading-tight text-center">{op.desc}</span>
+                  <span className="text-3xl">{op.icon}</span>
+                  <span className="text-base font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
+                  <span className="text-xs text-slate-500 leading-tight text-center">{op.desc}</span>
                 </button>
               ))}
             </div>
@@ -305,8 +300,7 @@ export default function MathSolver() {
             </div>
             <p className="font-semibold text-white text-lg">Solving...</p>
             <p className="text-slate-400 text-sm mt-1">
-              {operation && OPERATIONS.find(o => o.id === operation)?.icon}{" "}
-              {operation && OPERATIONS.find(o => o.id === operation)?.label}ing your expression
+              {operation === "explain" ? "📝 Building detailed explanation..." : "⚡ Working out the answer..."}
             </p>
             <p className="text-slate-500 text-xs mt-2 tabular-nums">{elapsed}s</p>
           </div>
