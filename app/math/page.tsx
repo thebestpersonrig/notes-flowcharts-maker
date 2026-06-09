@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 
 interface Step {
@@ -28,41 +28,46 @@ const OPERATIONS = [
   { id: "evaluate", label: "Evaluate", icon: "🔢", desc: "Calculate the numerical value" },
 ];
 
+// MathLive LaTeX commands for toolbar buttons
 const MATH_CONTROLS = [
-  { label: "x²", insert: "^2", title: "Square" },
-  { label: "xⁿ", insert: "^", title: "Exponent" },
-  { label: "√", insert: "sqrt(", title: "Square root" },
-  { label: "∛", insert: "cbrt(", title: "Cube root" },
-  { label: "π", insert: "π", title: "Pi" },
-  { label: "∞", insert: "∞", title: "Infinity" },
-  { label: "±", insert: "±", title: "Plus/minus" },
-  { label: "÷", insert: "÷", title: "Divide" },
-  { label: "×", insert: "×", title: "Multiply" },
-  { label: "()", insert: "()", title: "Parentheses", cursorOffset: -1 },
-  { label: "||", insert: "||", title: "Absolute value", cursorOffset: -1 },
-  { label: "log", insert: "log(", title: "Logarithm" },
-  { label: "ln", insert: "ln(", title: "Natural log" },
-  { label: "sin", insert: "sin(", title: "Sine" },
-  { label: "cos", insert: "cos(", title: "Cosine" },
-  { label: "tan", insert: "tan(", title: "Tangent" },
-  { label: "≤", insert: "≤", title: "Less than or equal" },
-  { label: "≥", insert: "≥", title: "Greater than or equal" },
-  { label: "≠", insert: "≠", title: "Not equal" },
-  { label: "θ", insert: "θ", title: "Theta" },
+  { label: "x²", latex: "^2", title: "Square" },
+  { label: "xⁿ", latex: "^{#0}", title: "Exponent" },
+  { label: "a/b", latex: "\\frac{#0}{}", title: "Fraction" },
+  { label: "√", latex: "\\sqrt{#0}", title: "Square root" },
+  { label: "∛", latex: "\\sqrt[3]{#0}", title: "Cube root" },
+  { label: "π", latex: "\\pi", title: "Pi" },
+  { label: "∞", latex: "\\infty", title: "Infinity" },
+  { label: "±", latex: "\\pm", title: "Plus/minus" },
+  { label: "×", latex: "\\times", title: "Multiply" },
+  { label: "÷", latex: "\\div", title: "Divide" },
+  { label: "()", latex: "\\left(#0\\right)", title: "Parentheses" },
+  { label: "|x|", latex: "\\left|#0\\right|", title: "Absolute value" },
+  { label: "log", latex: "\\log\\left(#0\\right)", title: "Logarithm" },
+  { label: "ln", latex: "\\ln\\left(#0\\right)", title: "Natural log" },
+  { label: "sin", latex: "\\sin\\left(#0\\right)", title: "Sine" },
+  { label: "cos", latex: "\\cos\\left(#0\\right)", title: "Cosine" },
+  { label: "tan", latex: "\\tan\\left(#0\\right)", title: "Tangent" },
+  { label: "x₁", latex: "_{#0}", title: "Subscript" },
+  { label: "≤", latex: "\\le", title: "Less than or equal" },
+  { label: "≥", latex: "\\ge", title: "Greater than or equal" },
+  { label: "≠", latex: "\\ne", title: "Not equal" },
+  { label: "θ", latex: "\\theta", title: "Theta" },
+  { label: "∫", latex: "\\int", title: "Integral" },
+  { label: "Σ", latex: "\\sum_{#0}^{}", title: "Summation" },
 ];
 
 const EXAMPLES = [
-  "x^2 + 5x + 6 = 0",
-  "3x + 7 = 22",
-  "sin(π/4)",
-  "d/dx (x^3 + 2x)",
-  "(2x + 3)(x - 5)",
-  "∫ 2x dx",
-  "x^2 - 9",
-  "lim x→0 sin(x)/x",
+  { display: "x² + 5x + 6 = 0", latex: "x^2 + 5x + 6 = 0" },
+  { display: "3x + 7 = 22", latex: "3x + 7 = 22" },
+  { display: "sin(π/4)", latex: "\\sin\\left(\\frac{\\pi}{4}\\right)" },
+  { display: "d/dx (x³ + 2x)", latex: "\\frac{d}{dx}\\left(x^3 + 2x\\right)" },
+  { display: "(2x + 3)(x - 5)", latex: "(2x+3)(x-5)" },
+  { display: "∫ 2x dx", latex: "\\int 2x\\, dx" },
+  { display: "x² - 9", latex: "x^2 - 9" },
+  { display: "√(x² + 1)", latex: "\\sqrt{x^2 + 1}" },
 ];
 
-// Clean any LaTeX that slips through from AI
+// Clean any LaTeX that slips through from AI output
 function cleanMath(text: string): string {
   if (!text) return text;
   return text
@@ -76,10 +81,12 @@ function cleanMath(text: string): string {
     .replace(/\\pi/g, "π")
     .replace(/\\infty/g, "∞")
     .replace(/\\theta/g, "θ")
+    .replace(/\\le\b/g, "≤")
+    .replace(/\\ge\b/g, "≥")
     .replace(/\\leq/g, "≤")
     .replace(/\\geq/g, "≥")
-    .replace(/\\neq/g, "≠")
-    .replace(/\\rightarrow|\\to/g, "→")
+    .replace(/\\neq|\\ne\b/g, "≠")
+    .replace(/\\rightarrow|\\to\b/g, "→")
     .replace(/\\leftarrow/g, "←")
     .replace(/\\quad/g, "  ")
     .replace(/\\qquad/g, "    ")
@@ -92,6 +99,13 @@ function cleanMath(text: string): string {
     .replace(/\\\s/g, " ");
 }
 
+// MathLive types
+interface MathfieldElement extends HTMLElement {
+  value: string;
+  insert: (latex: string, options?: Record<string, unknown>) => void;
+  focus: () => void;
+}
+
 export default function MathSolver() {
   const [expression, setExpression] = useState("");
   const [operation, setOperation] = useState<string | null>(null);
@@ -101,42 +115,101 @@ export default function MathSolver() {
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [history, setHistory] = useState<{ expr: string; op: string; result: string }[]>([]);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const resultsRef = useRef<HTMLDivElement>(null);
+  const [mathReady, setMathReady] = useState(false);
 
+  const mfContainerRef = useRef<HTMLDivElement>(null);
+  const mfRef = useRef<MathfieldElement | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const exprRef = useRef(expression);
+  exprRef.current = expression;
+
+  // Initialize MathLive
+  useEffect(() => {
+    let mounted = true;
+
+    import("mathlive").then((mathlive) => {
+      if (!mounted || !mfContainerRef.current) return;
+
+      // Suppress sounds
+      if (mathlive.MathfieldElement) {
+        mathlive.MathfieldElement.soundsDirectory = null;
+      }
+
+      const mf = document.createElement("math-field") as MathfieldElement;
+      mf.setAttribute("virtual-keyboard-mode", "off");
+      mf.setAttribute("smart-mode", "true");
+      mf.setAttribute("placeholder", "Type your math expression...");
+
+      mf.style.cssText = `
+        display: block;
+        width: 100%;
+        font-size: 1.3rem;
+        min-height: 64px;
+        padding: 14px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(255,255,255,0.1);
+        background: rgba(255,255,255,0.03);
+        color: #f1f5f9;
+        outline: none;
+        --caret-color: #6ee7b7;
+        --selection-background-color: rgba(99,102,241,0.3);
+        --contains-highlight-background-color: transparent;
+        --primary-color: #6ee7b7;
+        --smart-fence-color: #818cf8;
+        --placeholder-color: #64748b;
+        --text-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      `;
+
+      mf.addEventListener("input", () => {
+        setExpression(mf.value);
+        setSolution(null);
+        setOperation(null);
+        setMode(null);
+      });
+
+      // Focus style
+      mf.addEventListener("focus", () => {
+        mf.style.borderColor = "rgba(16,185,129,0.4)";
+        mf.style.boxShadow = "0 0 0 2px rgba(16,185,129,0.15)";
+      });
+      mf.addEventListener("blur", () => {
+        mf.style.borderColor = "rgba(255,255,255,0.1)";
+        mf.style.boxShadow = "none";
+      });
+
+      mfContainerRef.current.innerHTML = "";
+      mfContainerRef.current.appendChild(mf);
+      mfRef.current = mf;
+      setMathReady(true);
+    });
+
+    return () => { mounted = false; };
+  }, []);
+
+  // Theme
   useEffect(() => {
     const s = localStorage.getItem("learnix-theme") || "dark";
     document.documentElement.classList.toggle("dark", s === "dark");
   }, []);
 
+  // History
   useEffect(() => {
-    try {
-      setHistory(JSON.parse(localStorage.getItem("learnix-math-history") || "[]"));
-    } catch { /* */ }
+    try { setHistory(JSON.parse(localStorage.getItem("learnix-math-history") || "[]")); } catch { /* */ }
   }, []);
 
+  // Timer
   useEffect(() => {
     if (!loading) { setElapsed(0); return; }
     const i = setInterval(() => setElapsed(p => p + 1), 1000);
     return () => clearInterval(i);
   }, [loading]);
 
-  function insertAtCursor(text: string, cursorOffset = 0) {
-    const el = inputRef.current;
-    if (!el) { setExpression(p => p + text); return; }
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const before = expression.slice(0, start);
-    const after = expression.slice(end);
-    const newVal = before + text + after;
-    setExpression(newVal);
-    // Set cursor position after React re-render
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + text.length + cursorOffset;
-      el.setSelectionRange(pos, pos);
-    });
-  }
+  const insertLatex = useCallback((latex: string) => {
+    const mf = mfRef.current;
+    if (!mf) return;
+    mf.focus();
+    mf.insert(latex, { focus: true });
+  }, []);
 
   function selectOperation(opId: string) {
     if (!expression.trim()) return;
@@ -171,7 +244,6 @@ export default function MathSolver() {
       if (!res.ok) throw new Error(data?.error || "Failed to solve");
 
       setSolution(data);
-      // Save to history
       const item = { expr: expression.trim(), op: opLabel, result: data.result || "" };
       setHistory(prev => {
         const u = [item, ...prev].slice(0, 30);
@@ -196,17 +268,19 @@ export default function MathSolver() {
     setMode(null);
     setSolution(null);
     setError("");
+    if (mfRef.current) { mfRef.current.value = ""; }
     window.scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setTimeout(() => mfRef.current?.focus(), 100);
   }
 
-  function loadExample(ex: string) {
-    setExpression(ex);
+  function loadExample(latex: string) {
+    setExpression(latex);
     setOperation(null);
     setMode(null);
     setSolution(null);
     setError("");
-    inputRef.current?.focus();
+    if (mfRef.current) { mfRef.current.value = latex; }
+    mfRef.current?.focus();
   }
 
   const showOperations = expression.trim().length > 0 && !operation && !loading && !solution;
@@ -226,7 +300,7 @@ export default function MathSolver() {
           </Link>
         </div>
 
-        {/* Hero — only when no solution */}
+        {/* Hero */}
         {!solution && !loading && (
           <div className="text-center mb-10 animate-fadeInUp">
             <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-500/25">
@@ -241,15 +315,15 @@ export default function MathSolver() {
 
         {/* Input Area */}
         {!loading && (
-          <div className={`glass-strong rounded-2xl p-5 sm:p-6 mb-6 animate-fadeInUp ${solution ? "" : ""}`}>
+          <div className="glass-strong rounded-2xl p-5 sm:p-6 mb-6 animate-fadeInUp">
 
-            {/* Math Controls */}
+            {/* Math Controls Toolbar */}
             <div className="flex flex-wrap gap-1 mb-3">
               {MATH_CONTROLS.map(ctrl => (
                 <button
                   key={ctrl.label}
                   type="button"
-                  onClick={() => insertAtCursor(ctrl.insert, ctrl.cursorOffset || 0)}
+                  onClick={() => insertLatex(ctrl.latex)}
                   title={ctrl.title}
                   className="px-2 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/5 border border-white/10 text-slate-300 hover:bg-indigo-500/15 hover:text-indigo-300 hover:border-indigo-500/30 transition-all active:scale-95"
                 >
@@ -258,20 +332,15 @@ export default function MathSolver() {
               ))}
             </div>
 
-            {/* Expression Input */}
-            <textarea
-              ref={inputRef}
-              value={expression}
-              onChange={e => { setExpression(e.target.value); setSolution(null); setOperation(null); setMode(null); }}
-              placeholder="Type your math expression — e.g. x^2 + 5x + 6 = 0"
-              rows={2}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-lg font-mono text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition resize-none"
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                }
-              }}
-            />
+            {/* MathLive Input */}
+            <div ref={mfContainerRef} className="mathfield-wrapper">
+              {/* MathLive element gets injected here */}
+              {!mathReady && (
+                <div className="w-full min-h-[64px] rounded-xl border border-white/10 bg-white/[0.03] flex items-center px-4 text-slate-500 text-sm">
+                  Loading math editor...
+                </div>
+              )}
+            </div>
 
             {/* Examples */}
             {!expression && !solution && (
@@ -279,16 +348,16 @@ export default function MathSolver() {
                 <p className="text-xs text-slate-500 mb-2">Try an example:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {EXAMPLES.map(ex => (
-                    <button key={ex} onClick={() => loadExample(ex)}
+                    <button key={ex.display} onClick={() => loadExample(ex.latex)}
                       className="px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/8 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/20 transition">
-                      {ex}
+                      {ex.display}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* New Problem button when solution exists */}
+            {/* Actions when solution exists */}
             {solution && (
               <div className="mt-3 flex gap-2">
                 <button onClick={handleNewProblem}
@@ -386,16 +455,12 @@ export default function MathSolver() {
 
             {/* Expression + Operation header */}
             <div className="glass rounded-2xl p-5 sm:p-6 border-emerald-500/20">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div>
-                  <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    {solution.operation || operation}
-                  </p>
-                  <p className="text-xl sm:text-2xl font-mono font-bold text-white leading-snug">
-                    {cleanMath(solution.expression_formatted || expression)}
-                  </p>
-                </div>
-              </div>
+              <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-1.5">
+                {solution.operation || operation}
+              </p>
+              <p className="text-xl sm:text-2xl font-mono font-bold text-white leading-snug">
+                {cleanMath(solution.expression_formatted || expression)}
+              </p>
             </div>
 
             {/* Steps */}
@@ -407,7 +472,6 @@ export default function MathSolver() {
               <div className="space-y-0">
                 {solution.steps.map((step, i) => (
                   <div key={i} className="flex gap-4 group">
-                    {/* Step number + line */}
                     <div className="flex-shrink-0 flex flex-col items-center">
                       <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-bold text-sm group-hover:bg-emerald-500/25 transition">
                         {step.step}
@@ -416,7 +480,6 @@ export default function MathSolver() {
                         <div className="w-0.5 flex-1 bg-emerald-500/15 my-1" />
                       )}
                     </div>
-                    {/* Content */}
                     <div className="flex-1 pb-6">
                       <h4 className="text-white font-semibold text-sm mb-1.5">{cleanMath(step.title)}</h4>
                       <p className="text-slate-400 text-sm leading-relaxed mb-2">{cleanMath(step.content)}</p>
@@ -469,17 +532,17 @@ export default function MathSolver() {
           </div>
         )}
 
-        {/* Recent History — only on empty state */}
+        {/* Recent History */}
         {!solution && !loading && !expression && history.length > 0 && (
           <div className="mt-8 animate-fadeInUp" style={{ animationDelay: "200ms" }}>
             <h3 className="text-sm font-semibold text-slate-500 mb-3">Recent</h3>
             <div className="space-y-1.5">
               {history.slice(0, 5).map((item, i) => (
-                <button key={i} onClick={() => { setExpression(item.expr); setSolution(null); setOperation(null); setMode(null); }}
+                <button key={i} onClick={() => loadExample(item.expr)}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-slate-300 truncate">{item.expr}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{item.op} → <span className="text-emerald-400/70 font-mono">{item.result.length > 50 ? item.result.slice(0, 50) + "…" : item.result}</span></p>
+                    <p className="text-sm font-mono text-slate-300 truncate">{cleanMath(item.expr)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{item.op} → <span className="text-emerald-400/70 font-mono">{cleanMath(item.result.length > 50 ? item.result.slice(0, 50) + "…" : item.result)}</span></p>
                   </div>
                   <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
