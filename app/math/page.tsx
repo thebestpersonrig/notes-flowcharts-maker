@@ -62,6 +62,36 @@ const EXAMPLES = [
   "lim x→0 sin(x)/x",
 ];
 
+// Clean any LaTeX that slips through from AI
+function cleanMath(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\div/g, "÷")
+    .replace(/\\pm/g, "±")
+    .replace(/\\sqrt\{([^}]+)\}/g, "√($1)")
+    .replace(/\\sqrt/g, "√")
+    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "($1)/($2)")
+    .replace(/\\pi/g, "π")
+    .replace(/\\infty/g, "∞")
+    .replace(/\\theta/g, "θ")
+    .replace(/\\leq/g, "≤")
+    .replace(/\\geq/g, "≥")
+    .replace(/\\neq/g, "≠")
+    .replace(/\\rightarrow|\\to/g, "→")
+    .replace(/\\leftarrow/g, "←")
+    .replace(/\\quad/g, "  ")
+    .replace(/\\qquad/g, "    ")
+    .replace(/\\text\{([^}]+)\}/g, "$1")
+    .replace(/\\left/g, "")
+    .replace(/\\right/g, "")
+    .replace(/\\\\/g, "\n")
+    .replace(/\\,/g, " ")
+    .replace(/\\;/g, " ")
+    .replace(/\\\s/g, " ");
+}
+
 export default function MathSolver() {
   const [expression, setExpression] = useState("");
   const [operation, setOperation] = useState<string | null>(null);
@@ -362,7 +392,7 @@ export default function MathSolver() {
                     {solution.operation || operation}
                   </p>
                   <p className="text-xl sm:text-2xl font-mono font-bold text-white leading-snug">
-                    {solution.expression_formatted || expression}
+                    {cleanMath(solution.expression_formatted || expression)}
                   </p>
                 </div>
               </div>
@@ -388,11 +418,11 @@ export default function MathSolver() {
                     </div>
                     {/* Content */}
                     <div className="flex-1 pb-6">
-                      <h4 className="text-white font-semibold text-sm mb-1.5">{step.title}</h4>
-                      <p className="text-slate-400 text-sm leading-relaxed mb-2">{step.content}</p>
+                      <h4 className="text-white font-semibold text-sm mb-1.5">{cleanMath(step.title)}</h4>
+                      <p className="text-slate-400 text-sm leading-relaxed mb-2">{cleanMath(step.content)}</p>
                       {step.math && (
                         <div className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 font-mono text-sm text-indigo-300 overflow-x-auto">
-                          {step.math}
+                          {cleanMath(step.math)}
                         </div>
                       )}
                     </div>
@@ -408,7 +438,7 @@ export default function MathSolver() {
                 Result
               </h3>
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4">
-                <p className="text-xl font-mono font-bold text-emerald-300">{solution.result}</p>
+                <p className="text-xl font-mono font-bold text-emerald-300">{cleanMath(solution.result)}</p>
               </div>
             </div>
 
@@ -419,7 +449,7 @@ export default function MathSolver() {
                   <span className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center text-xs">🔎</span>
                   Verification
                 </h3>
-                <p className="text-slate-400 text-sm leading-relaxed font-mono">{solution.verification}</p>
+                <p className="text-slate-400 text-sm leading-relaxed font-mono">{cleanMath(solution.verification)}</p>
               </div>
             )}
 
