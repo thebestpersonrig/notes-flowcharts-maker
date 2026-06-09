@@ -127,14 +127,23 @@ export default function Home() {
 
   const [compareMode, setCompareMode] = useState(false);
   const [compareTopic, setCompareTopic] = useState("");
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
 
   const resultsRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hasFlowchart = notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0;
 
   function scrollToSection(id: string) {
-    sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Expand section if collapsed, then scroll
+    setCollapsedSections(prev => { const n = new Set(prev); n.delete(id); return n; });
+    setTimeout(() => sectionRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
+
+  function toggleSection(id: string) {
+    setCollapsedSections(prev => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  }
+
+  const isSectionCollapsed = (id: string) => collapsedSections.has(id);
 
   // ─── Effects ───────────────────────────────────────────────────────────────
   useEffect(() => { const s = localStorage.getItem("noteforge-theme") || "dark"; setTheme(s as "dark"|"light"); document.documentElement.classList.toggle("dark", s === "dark"); }, []);
@@ -511,10 +520,18 @@ export default function Home() {
             {/* ─── Table of Contents ─────────────────────────────── */}
             {activeTab === "notes" && (
               <div className="glass rounded-2xl p-4 animate-fadeInUp no-print" style={{ border: "1px solid rgba(34,211,238,0.15)" }}>
-                <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2 mb-3">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
-                  Table of Contents
-                </h3>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
+                    Table of Contents
+                  </h3>
+                  <button onClick={() => {
+                    const allIds = ["misconceptions", "analogies", "proscons", "timeline", "processflow", "practice", "terms", "reading"];
+                    setCollapsedSections(prev => prev.size > 0 ? new Set() : new Set(allIds));
+                  }} className="text-[11px] text-slate-500 hover:text-slate-300 transition px-2 py-1 rounded-lg hover:bg-white/5">
+                    {collapsedSections.size > 0 ? "Expand all" : "Collapse all"}
+                  </button>
+                </div>
                 <nav className="space-y-0.5">
                   <button onClick={() => scrollToSection("overview")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Overview
@@ -622,37 +639,52 @@ export default function Home() {
                 {/* Misconceptions */}
                 {notes.common_misconceptions?.length > 0 && (
                   <div ref={el => { sectionRefs.current["misconceptions"] = el; }}><GlassCard>
-                    <SectionTitle color="text-rose-400"><span className="w-7 h-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-sm">⚠️</span>Common Misconceptions</SectionTitle>
-                    <div className="space-y-3">{notes.common_misconceptions.map((m, i) => (
-                      <div key={i} className="rounded-xl overflow-hidden border border-white/5">
-                        <div className="bg-rose-500/8 px-4 py-3"><p className="text-rose-300 font-medium text-sm flex gap-2"><span>✗</span>{m.misconception}</p></div>
-                        <div className="bg-emerald-500/8 px-4 py-3"><p className="text-emerald-300 text-sm flex gap-2"><span>✓</span>{m.reality}</p></div>
-                      </div>
-                    ))}</div>
+                    <button onClick={() => toggleSection("misconceptions")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-rose-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-rose-500/20 flex items-center justify-center text-sm">⚠️</span>Common Misconceptions</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("misconceptions") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("misconceptions") ? "collapsed" : "expanded"}`}>
+                      <div className="space-y-3 pt-2">{notes.common_misconceptions.map((m, i) => (
+                        <div key={i} className="rounded-xl overflow-hidden border border-white/5">
+                          <div className="bg-rose-500/8 px-4 py-3"><p className="text-rose-300 font-medium text-sm flex gap-2"><span>✗</span>{m.misconception}</p></div>
+                          <div className="bg-emerald-500/8 px-4 py-3"><p className="text-emerald-300 text-sm flex gap-2"><span>✓</span>{m.reality}</p></div>
+                        </div>
+                      ))}</div>
+                    </div>
                   </GlassCard></div>
                 )}
 
                 {/* Analogies */}
                 {notes.analogies?.length > 0 && (
                   <div ref={el => { sectionRefs.current["analogies"] = el; }}><GlassCard>
-                    <SectionTitle color="text-violet-400"><span className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center text-sm">💡</span>Analogies</SectionTitle>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{notes.analogies.map((a, i) => (
-                      <div key={i} className="bg-violet-500/5 border border-violet-500/15 rounded-xl p-4 hover:bg-violet-500/10 transition">
-                        <p className="text-violet-300 font-semibold text-sm">{a.concept}</p>
-                        <p className="text-slate-300 text-sm mt-1.5">&ldquo;{a.analogy}&rdquo;</p>
-                        <p className="text-slate-500 text-xs mt-2 italic">{a.explanation}</p>
-                      </div>
-                    ))}</div>
+                    <button onClick={() => toggleSection("analogies")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-violet-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-violet-500/20 flex items-center justify-center text-sm">💡</span>Analogies</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("analogies") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("analogies") ? "collapsed" : "expanded"}`}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">{notes.analogies.map((a, i) => (
+                        <div key={i} className="bg-violet-500/5 border border-violet-500/15 rounded-xl p-4 hover:bg-violet-500/10 transition">
+                          <p className="text-violet-300 font-semibold text-sm">{a.concept}</p>
+                          <p className="text-slate-300 text-sm mt-1.5">&ldquo;{a.analogy}&rdquo;</p>
+                          <p className="text-slate-500 text-xs mt-2 italic">{a.explanation}</p>
+                        </div>
+                      ))}</div>
+                    </div>
                   </GlassCard></div>
                 )}
 
                 {/* Pros & Cons */}
                 {notes.pros_cons?.applicable && (
                   <GlassCard>
-                    <SectionTitle color="text-teal-400"><span className="w-7 h-7 rounded-lg bg-teal-500/20 flex items-center justify-center text-sm">⚖️</span>Pros & Cons{notes.pros_cons.context ? `: ${notes.pros_cons.context}` : ""}</SectionTitle>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div><h4 className="text-emerald-400 font-semibold text-xs uppercase tracking-wider mb-2">Advantages</h4><ul className="space-y-1.5">{notes.pros_cons.pros?.map((p, i) => <li key={i} className="flex gap-2 text-sm text-slate-300"><span className="text-emerald-400">+</span>{p}</li>)}</ul></div>
-                      <div><h4 className="text-rose-400 font-semibold text-xs uppercase tracking-wider mb-2">Disadvantages</h4><ul className="space-y-1.5">{notes.pros_cons.cons?.map((c, i) => <li key={i} className="flex gap-2 text-sm text-slate-300"><span className="text-rose-400">&minus;</span>{c}</li>)}</ul></div>
+                    <button onClick={() => toggleSection("proscons")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-teal-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-teal-500/20 flex items-center justify-center text-sm">⚖️</span>Pros & Cons{notes.pros_cons.context ? `: ${notes.pros_cons.context}` : ""}</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("proscons") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("proscons") ? "collapsed" : "expanded"}`}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                        <div><h4 className="text-emerald-400 font-semibold text-xs uppercase tracking-wider mb-2">Advantages</h4><ul className="space-y-1.5">{notes.pros_cons.pros?.map((p, i) => <li key={i} className="flex gap-2 text-sm text-slate-300"><span className="text-emerald-400">+</span>{p}</li>)}</ul></div>
+                        <div><h4 className="text-rose-400 font-semibold text-xs uppercase tracking-wider mb-2">Disadvantages</h4><ul className="space-y-1.5">{notes.pros_cons.cons?.map((c, i) => <li key={i} className="flex gap-2 text-sm text-slate-300"><span className="text-rose-400">&minus;</span>{c}</li>)}</ul></div>
+                      </div>
                     </div>
                   </GlassCard>
                 )}
@@ -660,35 +692,49 @@ export default function Home() {
                 {/* Timeline */}
                 {notes.timeline?.applicable && notes.timeline.events?.length > 0 && (
                   <GlassCard>
-                    <SectionTitle color="text-amber-400"><span className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center text-sm">🕰️</span>Timeline</SectionTitle>
-                    <div className="space-y-0">{notes.timeline.events.map((ev, i) => (
-                      <div key={i} className="flex gap-4">
-                        <div className="flex-shrink-0 w-20 text-right pt-1"><span className="text-amber-400 font-bold text-sm">{ev.year}</span></div>
-                        <div className="flex-shrink-0 w-4 flex flex-col items-center"><div className="w-3 h-3 rounded-full bg-amber-400 border-2 border-[#0a0a1a] mt-1.5" />{i < notes.timeline.events.length - 1 && <div className="w-0.5 flex-1 bg-amber-500/20" />}</div>
-                        <div className="flex-1 pb-4"><p className="text-white font-medium text-sm">{ev.event}</p><p className="text-slate-500 text-xs mt-0.5">{ev.significance}</p></div>
-                      </div>
-                    ))}</div>
+                    <button onClick={() => toggleSection("timeline")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-amber-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-amber-500/20 flex items-center justify-center text-sm">🕰️</span>Timeline</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("timeline") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("timeline") ? "collapsed" : "expanded"}`}>
+                      <div className="space-y-0 pt-2">{notes.timeline.events.map((ev, i) => (
+                        <div key={i} className="flex gap-4">
+                          <div className="flex-shrink-0 w-20 text-right pt-1"><span className="text-amber-400 font-bold text-sm">{ev.year}</span></div>
+                          <div className="flex-shrink-0 w-4 flex flex-col items-center"><div className="w-3 h-3 rounded-full bg-amber-400 border-2 border-[#0a0a1a] mt-1.5" />{i < notes.timeline.events.length - 1 && <div className="w-0.5 flex-1 bg-amber-500/20" />}</div>
+                          <div className="flex-1 pb-4"><p className="text-white font-medium text-sm">{ev.event}</p><p className="text-slate-500 text-xs mt-0.5">{ev.significance}</p></div>
+                        </div>
+                      ))}</div>
+                    </div>
                   </GlassCard>
                 )}
 
                 {/* Process Flow */}
                 {hasFlowchart && (
                   <GlassCard>
-                    <SectionTitle>{notes.process_flow.title}</SectionTitle>
-                    <div className="space-y-3">{notes.process_flow.steps.map((step, i) => (
-                      <div key={i} className="flex gap-4">
-                        <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm">{step.step}</div>
-                        <div className="flex-1 pb-3 border-b border-white/5"><p className="text-white font-medium text-sm">{step.title}</p><p className="text-slate-400 text-sm mt-0.5">{step.description}</p></div>
-                      </div>
-                    ))}</div>
+                    <button onClick={() => toggleSection("processflow")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-indigo-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">🔄</span>{notes.process_flow.title}</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("processflow") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("processflow") ? "collapsed" : "expanded"}`}>
+                      <div className="space-y-3 pt-2">{notes.process_flow.steps.map((step, i) => (
+                        <div key={i} className="flex gap-4">
+                          <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm">{step.step}</div>
+                          <div className="flex-1 pb-3 border-b border-white/5"><p className="text-white font-medium text-sm">{step.title}</p><p className="text-slate-400 text-sm mt-0.5">{step.description}</p></div>
+                        </div>
+                      ))}</div>
+                    </div>
                   </GlassCard>
                 )}
 
                 {/* Practice Problems */}
                 {notes.practice_problems?.length > 0 && (
                   <GlassCard>
-                    <SectionTitle color="text-fuchsia-400"><span className="w-7 h-7 rounded-lg bg-fuchsia-500/20 flex items-center justify-center text-sm">🧠</span>Practice Problems</SectionTitle>
-                    <div className="space-y-4">{notes.practice_problems.map((pp, i) => (
+                    <button onClick={() => toggleSection("practice")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-fuchsia-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-fuchsia-500/20 flex items-center justify-center text-sm">🧠</span>Practice Problems</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("practice") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("practice") ? "collapsed" : "expanded"}`}>
+                    <div className="space-y-4 pt-2">{notes.practice_problems.map((pp, i) => (
                       <div key={i} className="bg-fuchsia-500/5 border border-fuchsia-500/15 rounded-xl p-4">
                         <p className="text-white font-medium text-sm"><span className="text-fuchsia-400 mr-1.5">Q{i + 1}.</span>{pp.problem}</p>
                         <div className="flex gap-3 mt-2.5">
@@ -699,19 +745,25 @@ export default function Home() {
                         {revealedAnswers.has(i) && <p className="text-emerald-300 text-sm mt-2.5 bg-emerald-500/10 rounded-lg p-3 animate-fadeIn">{pp.answer}</p>}
                       </div>
                     ))}</div>
+                    </div>
                   </GlassCard>
                 )}
 
                 {/* Key Terms */}
                 {notes.key_terms?.length > 0 && (
                   <div ref={el => { sectionRefs.current["terms"] = el; }}><GlassCard>
-                    <SectionTitle><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📚</span>Key Terms</SectionTitle>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">{notes.key_terms.map((item, i) => (
-                      <div key={i} className="bg-white/3 rounded-xl p-3.5 hover:bg-white/5 transition border border-white/5">
-                        <p className="text-indigo-400 font-semibold text-sm">{item.term}</p>
-                        <p className="text-slate-400 text-xs mt-1 leading-relaxed">{item.definition}</p>
-                      </div>
-                    ))}</div>
+                    <button onClick={() => toggleSection("terms")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-indigo-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📚</span>Key Terms <span className="text-xs font-normal text-slate-500">({notes.key_terms.length})</span></h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("terms") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("terms") ? "collapsed" : "expanded"}`}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">{notes.key_terms.map((item, i) => (
+                        <div key={i} className="bg-white/3 rounded-xl p-3.5 hover:bg-white/5 transition border border-white/5">
+                          <p className="text-indigo-400 font-semibold text-sm">{item.term}</p>
+                          <p className="text-slate-400 text-xs mt-1 leading-relaxed">{item.definition}</p>
+                        </div>
+                      ))}</div>
+                    </div>
                   </GlassCard></div>
                 )}
 
@@ -724,8 +776,13 @@ export default function Home() {
                 {/* Further Reading */}
                 {notes.further_reading?.length > 0 && (
                   <GlassCard>
-                    <SectionTitle><span className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center text-sm">📖</span>Further Reading</SectionTitle>
-                    <ul className="space-y-1.5">{notes.further_reading.map((r, i) => <li key={i} className="flex gap-2 text-slate-300 text-sm"><span className="text-cyan-400">&rarr;</span>{r}</li>)}</ul>
+                    <button onClick={() => toggleSection("reading")} className="w-full flex items-center justify-between mb-1 group">
+                      <h3 className="text-lg font-semibold text-cyan-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-cyan-500/20 flex items-center justify-center text-sm">📖</span>Further Reading</h3>
+                      <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("reading") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+                    <div className={`section-body ${isSectionCollapsed("reading") ? "collapsed" : "expanded"}`}>
+                      <ul className="space-y-1.5 pt-2">{notes.further_reading.map((r, i) => <li key={i} className="flex gap-2 text-slate-300 text-sm"><span className="text-cyan-400">&rarr;</span>{r}</li>)}</ul>
+                    </div>
                   </GlassCard>
                 )}
               </div>
