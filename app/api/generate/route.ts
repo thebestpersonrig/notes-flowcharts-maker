@@ -243,7 +243,7 @@ ${gradeInstruction}
 Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
 {
   "title": "A compelling, descriptive title for these notes",
-  "overview": "2-3 paragraphs introducing the topic. Hook the reader immediately — why does this topic matter? What will they learn? Make it engaging, not dry.",
+  "overview": "2-3 paragraphs introducing the topic. MUST open with a surprising fact, counter-intuitive statement, or vivid scenario — NOT a dry 'X is a...' definition. Hook the reader like a great article would. Then explain why this topic matters and what they'll learn.",
   "sections": [
     {
       "title": "Section Title",
@@ -251,7 +251,7 @@ Return ONLY valid JSON (no markdown, no code fences, no text before or after the
       "difficulty": "beginner | intermediate | advanced",
       "content": "A thorough, well-written paragraph (or two) explaining the core idea. Be specific. Use concrete details, not vague generalities.",
       "key_points": ["Each point should be a complete, useful thought — not a fragment", "Include enough detail to be useful on its own", "3-5 points per section"],
-      "examples": ["A SPECIFIC real-world example with names, numbers, or concrete details — not 'for example, some companies use this'"],
+      "examples": ["MUST include a real-world example with a NAMED company/person/event and a SPECIFIC number or date — e.g. 'In 2020, Tesla produced 509,737 vehicles using...' NOT 'for example, some companies use this'"],
       "connections": "How this connects to other sections, related concepts, or the bigger picture",
       "subsections": [{"title": "Subtopic", "content": "Detailed explanation"}]
     }
@@ -289,14 +289,15 @@ Return ONLY valid JSON (no markdown, no code fences, no text before or after the
 
 OUTPUT RULES:
 - pros_cons.applicable = true ONLY if the topic genuinely involves choices or tradeoffs. False for pure knowledge topics.
-- timeline.applicable = true ONLY if the topic has real historical development. False for abstract concepts.
-- process_flow.applicable = true ONLY if there's a clear sequential process. False for descriptive topics.
-- 3-5 common_misconceptions — things people ACTUALLY get wrong, not made-up ones
-- 3-5 analogies using everyday objects and experiences people can instantly picture
-- 3-5 practice_problems that test UNDERSTANDING, not just recall
-- 8-15 key_terms with real, useful definitions
-- Make examples SPECIFIC: use real companies, real events, real numbers, real people — not "for example, a company might..."
-- Every piece of content must be factually accurate
+- timeline.applicable = true if the topic has ANY historical development, key dates, or evolution over time. Most topics do — lean toward true.
+- process_flow.applicable = true if you can describe the topic as a sequence of steps, stages, phases, or a cycle. This includes biological processes, algorithms, historical progressions, cause-and-effect chains, how-things-work explanations, etc. LEAN TOWARD TRUE — most topics have at least one process worth diagramming.
+- 3-5 common_misconceptions — things students ACTUALLY confuse or get wrong on tests. Not obscure trivia.
+- 3-5 analogies — each analogy MUST compare to something a teenager would encounter daily (food, sports, social media, school, video games, their phone). Never use abstract analogies.
+- 3-5 practice_problems — mix of difficulty: 1 recall, 2 application ("what would happen if..."), 1-2 analysis ("why does X cause Y instead of Z?")
+- 8-15 key_terms with COMPLETE definitions (at least 10 words each). Never give 2-word definitions.
+- EVERY example MUST name a real company, person, place, event, or study with a specific number/date/fact. "For example, a company might..." is BANNED.
+- overview MUST start with a hook (surprising fact, question, or bold claim) — NEVER start with "[Topic] is a..." or "[Topic] refers to..."
+- All content must be factually accurate
 - If a grade level is specified, EVERY piece of content must be appropriate for that level — this overrides everything else`;
 
     // Build messages — use multimodal format for images
@@ -318,12 +319,19 @@ OUTPUT RULES:
     }
 
     const message = await client.chat.completions.create({
-      model: "openrouter/free",
+      model: "google/gemma-4-31b-it:free",
       max_tokens: finalMaxTokens,
       messages,
     });
 
-    const raw = message.choices[0].message.content ?? "";
+    const raw = message.choices[0]?.message?.content ?? "";
+
+    if (!raw.trim()) {
+      return NextResponse.json(
+        { error: "The AI returned an empty response. Please try again." },
+        { status: 500 }
+      );
+    }
 
     // Strip markdown code fences if present, and extract JSON robustly
     let cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
@@ -337,7 +345,7 @@ OUTPUT RULES:
       if (!match) {
         console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
         return NextResponse.json(
-          { error: "Failed to parse AI response. Please try again." },
+          { error: "The AI didn't return valid notes. This can happen with free models — please try again." },
           { status: 500 }
         );
       }
@@ -346,10 +354,18 @@ OUTPUT RULES:
       } catch (err) {
         console.error("JSON fallback parse failed:", err);
         return NextResponse.json(
-          { error: "Failed to parse AI response. Please try again." },
+          { error: "The AI didn't return valid notes. This can happen with free models — please try again." },
           { status: 500 }
         );
       }
+    }
+
+    // Validate minimum required fields
+    if (!parsed.title || !parsed.sections) {
+      return NextResponse.json(
+        { error: "The AI returned incomplete notes. Please try again." },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json(parsed);

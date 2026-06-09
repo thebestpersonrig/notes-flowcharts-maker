@@ -72,16 +72,22 @@ Rules:
 - Exactly 5 questions, 4 options each
 - "correct" is the 0-based index of the right answer
 - Vary the position of the correct answer (don't always make it A)
-- Explanations should teach, not just state the answer
-- Questions must be answerable from the notes alone`;
+- CRITICAL — Explanations must explain WHY the correct answer is right AND briefly explain why EACH wrong answer is wrong. Format: "Correct: [A] because [reason]. B is wrong because [reason]. C is wrong because [reason]. D is wrong because [reason]."
+- Questions must be answerable from the notes alone
+- Write questions that a student might actually see on an exam — not obscure trivia`;
 
     const message = await client.chat.completions.create({
-      model: "openrouter/free",
+      model: "google/gemma-4-31b-it:free",
       max_tokens: 3000,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const raw = message.choices[0].message.content ?? "";
+    const raw = message.choices[0]?.message?.content ?? "";
+
+    if (!raw.trim()) {
+      return NextResponse.json({ error: "The AI returned an empty response. Please try again." }, { status: 500 });
+    }
+
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
 
     let parsed;
@@ -90,9 +96,18 @@ Rules:
     } catch {
       const match = cleaned.match(/\{[\s\S]*\}/);
       if (!match) {
-        return NextResponse.json({ error: "Failed to parse quiz response" }, { status: 500 });
+        console.error("Quiz JSON parse failed. Raw:", raw.slice(0, 500));
+        return NextResponse.json({ error: "The AI didn't return a valid quiz. Please try again." }, { status: 500 });
       }
-      parsed = JSON.parse(match[0]);
+      try {
+        parsed = JSON.parse(match[0]);
+      } catch {
+        return NextResponse.json({ error: "The AI didn't return a valid quiz. Please try again." }, { status: 500 });
+      }
+    }
+
+    if (!parsed.questions || !Array.isArray(parsed.questions)) {
+      return NextResponse.json({ error: "The AI returned an incomplete quiz. Please try again." }, { status: 500 });
     }
 
     return NextResponse.json(parsed);

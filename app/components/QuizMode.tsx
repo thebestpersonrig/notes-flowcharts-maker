@@ -80,7 +80,8 @@ export default function QuizMode({ notes }: { notes: NotesData }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ notes, difficulty }),
       });
-      const data = await res.json();
+      let data;
+      try { data = await res.json(); } catch { throw new Error("The AI returned an invalid response. Please try again."); }
       if (!res.ok) throw new Error(data.error);
       setQuestions(data.questions);
       startTimer(difficulty);
@@ -185,17 +186,29 @@ export default function QuizMode({ notes }: { notes: NotesData }) {
         </div>
       )}
 
-      {/* Score banner */}
-      {showResults && (
-        <div className={`rounded-xl p-4 text-center font-semibold text-lg animate-scaleIn ${
-          score === questions.length ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20"
-          : score >= questions.length / 2 ? "bg-amber-500/15 text-amber-300 border border-amber-500/20"
-          : "bg-rose-500/15 text-rose-300 border border-rose-500/20"
-        }`}>
-          {score === questions.length ? "🎉 " : ""}{score} / {questions.length} ({Math.round((score / questions.length) * 100)}%)
-          {timed && timeLeft === 0 && !allAnswered && <p className="text-sm font-normal mt-1 opacity-70">Time&apos;s up!</p>}
-        </div>
-      )}
+      {/* Score card */}
+      {showResults && (() => {
+        const pct = Math.round((score / questions.length) * 100);
+        const perfect = score === questions.length;
+        const good = pct >= 60;
+        const emoji = perfect ? "🎉" : good ? "💪" : "📚";
+        const msg = perfect ? "Perfect score!" : good ? "Nice work!" : "Keep studying!";
+        const sub = perfect ? "You nailed every question — you really know this topic!"
+          : good ? `You got most of them right. Review the ones you missed below.`
+          : "Don't worry — review the explanations below and try again!";
+        return (
+          <div className={`rounded-2xl p-6 text-center animate-scaleIn border ${perfect ? "bg-emerald-500/10 border-emerald-500/20" : good ? "bg-amber-500/10 border-amber-500/20" : "bg-rose-500/10 border-rose-500/20"}`}>
+            <div className="text-5xl mb-3">{emoji}</div>
+            <p className={`text-2xl font-bold ${perfect ? "text-emerald-300" : good ? "text-amber-300" : "text-rose-300"}`}>{score}/{questions.length}</p>
+            <div className="w-full bg-white/10 rounded-full h-2.5 mt-3 mb-2 max-w-xs mx-auto overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-1000 ${perfect ? "bg-emerald-400" : good ? "bg-amber-400" : "bg-rose-400"}`} style={{ width: `${pct}%` }} />
+            </div>
+            <p className={`font-semibold text-lg mt-2 ${perfect ? "text-emerald-300" : good ? "text-amber-300" : "text-rose-300"}`}>{msg}</p>
+            <p className="text-slate-400 text-sm mt-1">{sub}</p>
+            {timed && timeLeft === 0 && !allAnswered && <p className="text-sm text-slate-500 mt-2">⏱️ Time ran out</p>}
+          </div>
+        );
+      })()}
 
       {/* Questions */}
       {questions.map((q, qi) => (

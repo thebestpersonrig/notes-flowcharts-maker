@@ -36,7 +36,7 @@ Rules:
 - Format your response in plain text (no markdown headers, no bullet symbols)`;
 
     const completion = await client.chat.completions.create({
-      model: "openrouter/free",
+      model: "google/gemma-4-31b-it:free",
       max_tokens: 1500,
       messages: [
         { role: "system", content: systemPrompt },
@@ -44,7 +44,7 @@ Rules:
       ],
     });
 
-    const reply = completion.choices[0].message.content ?? "Sorry, I couldn't generate a response.";
+    const reply = completion.choices[0]?.message?.content ?? "Sorry, I couldn't generate a response. Please try again.";
     return NextResponse.json({ reply });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
