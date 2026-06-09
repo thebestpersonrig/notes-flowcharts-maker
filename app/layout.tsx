@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NoteForge AI — AI-Powered Notes & Flowcharts",
-  description: "Generate detailed notes and process flowcharts on any topic, downloadable as a Word document.",
+  title: "Learnix — AI Study Tools, Notes & Math Solver",
+  description: "AI-powered study notes, flowcharts, quizzes, and step-by-step math solver. Download as Word documents.",
 };
 
 export default function RootLayout({
