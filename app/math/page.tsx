@@ -19,8 +19,13 @@ interface Solution {
 }
 
 const OPERATIONS = [
-  { id: "answer", label: "Answer", icon: "⚡", desc: "Quick answer with key steps" },
-  { id: "explain", label: "Explain", icon: "📝", desc: "Detailed step-by-step explanation" },
+  { id: "solve", label: "Solve", icon: "🔍", desc: "Find the value of unknowns" },
+  { id: "simplify", label: "Simplify", icon: "✨", desc: "Reduce to simplest form" },
+  { id: "factor", label: "Factor", icon: "🧩", desc: "Break into factors" },
+  { id: "expand", label: "Expand", icon: "📐", desc: "Multiply out brackets" },
+  { id: "differentiate", label: "Differentiate", icon: "📈", desc: "Find the derivative" },
+  { id: "integrate", label: "Integrate", icon: "📊", desc: "Find the antiderivative" },
+  { id: "evaluate", label: "Evaluate", icon: "🔢", desc: "Calculate the numerical value" },
 ];
 
 const MATH_CONTROLS = [
@@ -60,6 +65,7 @@ const EXAMPLES = [
 export default function MathSolver() {
   const [expression, setExpression] = useState("");
   const [operation, setOperation] = useState<string | null>(null);
+  const [mode, setMode] = useState<string | null>(null);
   const [solution, setSolution] = useState<Solution | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -105,21 +111,27 @@ export default function MathSolver() {
   function selectOperation(opId: string) {
     if (!expression.trim()) return;
     setOperation(opId);
-    handleSolve(opId);
+    setMode(null);
   }
 
-  async function handleSolve(opId: string) {
+  function selectMode(m: string) {
+    if (!operation) return;
+    setMode(m);
+    handleSolve(operation, m);
+  }
+
+  async function handleSolve(opId: string, solveMode: string) {
     if (!expression.trim()) return;
     setLoading(true);
     setError("");
     setSolution(null);
 
     try {
-      const opLabel = opId;
+      const opLabel = OPERATIONS.find(o => o.id === opId)?.label || opId;
       const res = await fetch("/api/math", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression: expression.trim(), operation: opLabel }),
+        body: JSON.stringify({ expression: expression.trim(), operation: opLabel, mode: solveMode }),
       });
 
       let data;
@@ -151,6 +163,7 @@ export default function MathSolver() {
   function handleNewProblem() {
     setExpression("");
     setOperation(null);
+    setMode(null);
     setSolution(null);
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -160,12 +173,14 @@ export default function MathSolver() {
   function loadExample(ex: string) {
     setExpression(ex);
     setOperation(null);
+    setMode(null);
     setSolution(null);
     setError("");
     inputRef.current?.focus();
   }
 
-  const showOperations = expression.trim().length > 0 && !loading && !solution;
+  const showOperations = expression.trim().length > 0 && !operation && !loading && !solution;
+  const showModeChoice = operation && !mode && !loading && !solution;
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0a0a1a] text-slate-800 dark:text-slate-200 transition-colors duration-300 relative flex flex-col">
@@ -217,7 +232,7 @@ export default function MathSolver() {
             <textarea
               ref={inputRef}
               value={expression}
-              onChange={e => { setExpression(e.target.value); if (solution) { setSolution(null); setOperation(null); } }}
+              onChange={e => { setExpression(e.target.value); setSolution(null); setOperation(null); setMode(null); }}
               placeholder="Type your math expression — e.g. x^2 + 5x + 6 = 0"
               rows={2}
               className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-lg font-mono text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition resize-none"
@@ -251,7 +266,7 @@ export default function MathSolver() {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                   New Problem
                 </button>
-                <button onClick={() => { setSolution(null); setOperation(null); }}
+                <button onClick={() => { setSolution(null); setOperation(null); setMode(null); }}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 hover:bg-indigo-500/20 transition active:scale-95">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                   Try Different Operation
@@ -264,19 +279,47 @@ export default function MathSolver() {
         {/* Operation Selection */}
         {showOperations && (
           <div className="mb-6 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
-            <p className="text-sm font-semibold text-slate-400 mb-3">How would you like the solution?</p>
-            <div className="grid grid-cols-2 gap-3">
+            <p className="text-sm font-semibold text-slate-400 mb-3">What do you want to do with this expression?</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {OPERATIONS.map(op => (
                 <button
                   key={op.id}
                   onClick={() => selectOperation(op.id)}
-                  className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                  className="group flex flex-col items-center gap-1.5 p-4 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
-                  <span className="text-3xl">{op.icon}</span>
-                  <span className="text-base font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
-                  <span className="text-xs text-slate-500 leading-tight text-center">{op.desc}</span>
+                  <span className="text-2xl">{op.icon}</span>
+                  <span className="text-sm font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
+                  <span className="text-[11px] text-slate-500 leading-tight text-center">{op.desc}</span>
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Answer vs Explain */}
+        {showModeChoice && (
+          <div className="mb-6 animate-fadeInUp">
+            <div className="flex items-center gap-2 mb-3">
+              <button onClick={() => setOperation(null)} className="text-slate-500 hover:text-slate-300 transition p-1">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+              </button>
+              <p className="text-sm font-semibold text-slate-400">
+                {OPERATIONS.find(o => o.id === operation)?.icon} {OPERATIONS.find(o => o.id === operation)?.label} — how detailed?
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => selectMode("answer")}
+                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                <span className="text-3xl">⚡</span>
+                <span className="text-base font-bold text-slate-200 group-hover:text-amber-300 transition">Answer</span>
+                <span className="text-xs text-slate-500 leading-tight text-center">Quick answer with key steps</span>
+              </button>
+              <button onClick={() => selectMode("explain")}
+                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                <span className="text-3xl">📝</span>
+                <span className="text-base font-bold text-slate-200 group-hover:text-emerald-300 transition">Explain</span>
+                <span className="text-xs text-slate-500 leading-tight text-center">Detailed step-by-step explanation</span>
+              </button>
             </div>
           </div>
         )}
@@ -300,7 +343,8 @@ export default function MathSolver() {
             </div>
             <p className="font-semibold text-white text-lg">Solving...</p>
             <p className="text-slate-400 text-sm mt-1">
-              {operation === "explain" ? "📝 Building detailed explanation..." : "⚡ Working out the answer..."}
+              {OPERATIONS.find(o => o.id === operation)?.icon}{" "}
+              {OPERATIONS.find(o => o.id === operation)?.label} — {mode === "explain" ? "building explanation..." : "getting answer..."}
             </p>
             <p className="text-slate-500 text-xs mt-2 tabular-nums">{elapsed}s</p>
           </div>
@@ -386,7 +430,7 @@ export default function MathSolver() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 Solve Another Problem
               </button>
-              <button onClick={() => { setSolution(null); setOperation(null); }}
+              <button onClick={() => { setSolution(null); setOperation(null); setMode(null); }}
                 className="glass px-6 py-3.5 text-slate-300 font-medium rounded-xl inline-flex items-center gap-2 hover:bg-white/10 transition active:scale-95">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Different Operation
@@ -401,7 +445,7 @@ export default function MathSolver() {
             <h3 className="text-sm font-semibold text-slate-500 mb-3">Recent</h3>
             <div className="space-y-1.5">
               {history.slice(0, 5).map((item, i) => (
-                <button key={i} onClick={() => { setExpression(item.expr); setSolution(null); setOperation(null); }}
+                <button key={i} onClick={() => { setExpression(item.expr); setSolution(null); setOperation(null); setMode(null); }}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-mono text-slate-300 truncate">{item.expr}</p>

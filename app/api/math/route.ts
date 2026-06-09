@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { expression, operation } = await req.json();
+    const { expression, operation, mode = "answer" } = await req.json();
 
     if (!expression?.trim()) {
       return NextResponse.json(
@@ -96,12 +96,16 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const isExplain = operation.toLowerCase() === "explain";
+    const isExplain = mode === "explain";
     const systemPrompt = isExplain ? EXPLAIN_PROMPT : ANSWER_PROMPT;
 
-    const userPrompt = `${isExplain ? "Solve and explain in detail" : "Solve concisely"}: ${expression.trim()}
+    const userPrompt = `${operation} the following expression${isExplain ? ". Explain every step in detail" : ". Give a concise solution with key steps only"}.
 
-Figure out the right operation (solve, simplify, factor, evaluate, differentiate, integrate, etc.) from context. Be accurate. Return ONLY valid JSON.`;
+Expression: ${expression.trim()}
+
+Operation: ${operation}
+
+Be accurate. Double-check your work. Return ONLY valid JSON.`;
 
     const completion = await client.chat.completions.create({
       model: "google/gemma-4-31b-it:free",
