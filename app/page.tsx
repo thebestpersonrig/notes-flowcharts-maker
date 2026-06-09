@@ -461,10 +461,16 @@ export default function Home() {
               <p className="font-semibold text-white text-lg">Generating your notes...</p>
               <p className="text-slate-400 text-sm mt-1 tabular-nums">{elapsed}s elapsed</p>
             </div>
-            {[1, 2, 3].map(i => (
-              <div key={i} className="glass rounded-2xl p-6 overflow-hidden">
-                <div className="h-5 bg-white/5 rounded-lg w-1/3 mb-4 shimmer" />
-                <div className="space-y-2.5"><div className="h-3 bg-white/5 rounded-lg w-full shimmer" /><div className="h-3 bg-white/5 rounded-lg w-5/6 shimmer" /><div className="h-3 bg-white/5 rounded-lg w-4/6 shimmer" /></div>
+            {[
+              { title: "w-2/5", lines: ["w-full", "w-11/12", "w-4/5"] },
+              { title: "w-1/3", lines: ["w-full", "w-5/6", "w-3/5", "w-4/5"] },
+              { title: "w-1/4", lines: ["w-full", "w-9/12", "w-5/6"] },
+            ].map((skel, i) => (
+              <div key={i} className="glass rounded-2xl p-6 overflow-hidden" style={{ animationDelay: `${i * 120}ms` }}>
+                <div className={`h-5 bg-white/8 dark:bg-white/5 rounded-lg ${skel.title} mb-5 shimmer`} />
+                <div className="space-y-3">{skel.lines.map((w, j) => (
+                  <div key={j} className={`h-3 bg-white/6 dark:bg-white/[0.04] rounded-lg ${w} shimmer`} style={{ animationDelay: `${j * 200}ms` }} />
+                ))}</div>
               </div>
             ))}
           </div>
@@ -475,7 +481,7 @@ export default function Home() {
           <div className="space-y-5" ref={resultsRef}>
 
             {/* Title bar + hero */}
-            <div className="rounded-2xl overflow-hidden animate-fadeInUp glass" style={{ border: "1px solid rgba(99,102,241,0.2)" }}>
+            <div className="rounded-2xl overflow-hidden animate-fadeInUp glass border-indigo-500/20">
               {(heroImage || heroImageLoading) && (
                 <div className="relative w-full h-48 sm:h-60 bg-slate-800/50 overflow-hidden">
                   {heroImage ? <img src={heroImage} alt={notes.title} className="w-full h-full object-cover animate-fadeIn" /> : (
@@ -507,7 +513,7 @@ export default function Home() {
                       { onClick: handleDownloadWord, label: downloading ? "..." : "Word", cls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30", icon: "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", disabled: downloading },
                       { onClick: handleShare, label: copied ? "Copied!" : "Share", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30", icon: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" },
                     ].map(({ onClick, label, cls, icon, disabled }) => (
-                      <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
+                      <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
                       </button>
                     ))}
@@ -516,10 +522,9 @@ export default function Home() {
               </div>
             </div>
 
-
             {/* ─── Table of Contents ─────────────────────────────── */}
             {activeTab === "notes" && (
-              <div className="glass rounded-2xl p-4 animate-fadeInUp no-print" style={{ border: "1px solid rgba(34,211,238,0.15)" }}>
+              <div className="glass rounded-2xl p-4 animate-fadeInUp no-print border-cyan-500/15">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-cyan-400 font-semibold text-sm flex items-center gap-2">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>
@@ -532,7 +537,7 @@ export default function Home() {
                     {collapsedSections.size > 0 ? "Expand all" : "Collapse all"}
                   </button>
                 </div>
-                <nav className="space-y-0.5">
+                <nav className="space-y-1">
                   <button onClick={() => scrollToSection("overview")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Overview
                   </button>
@@ -585,7 +590,7 @@ export default function Home() {
                 {/* Overview */}
                 <div ref={el => { sectionRefs.current["overview"] = el; }}><GlassCard>
                   <SectionTitle><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📋</span>Overview</SectionTitle>
-                  <div className="text-slate-600 dark:text-slate-300 leading-relaxed space-y-3">
+                  <div className="text-slate-600 dark:text-slate-200/90 leading-[1.8] space-y-4">
                     {editMode ? <EditText value={notes.overview} onChange={v => updateNotes(n => ({ ...n, overview: v }))} editMode={editMode} /> : notes.overview.split("\n\n").map((p, i) => <p key={i}>{p}</p>)}
                   </div>
                 </GlassCard></div>
@@ -594,7 +599,7 @@ export default function Home() {
                 <div ref={el => { sectionRefs.current["sections"] = el; }}><GlassCard className="!p-0 overflow-hidden">
                   <div className="flex overflow-x-auto border-b border-white/10 scrollbar-none">
                     {notes.sections.map((s, i) => (
-                      <button key={i} onClick={() => setActiveSection(i)} className={`px-5 py-3.5 text-sm font-medium whitespace-nowrap transition flex-shrink-0 ${activeSection === i ? "bg-indigo-500/15 text-indigo-400 border-b-2 border-indigo-500" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"}`}>{s.title}</button>
+                      <button key={i} onClick={() => setActiveSection(i)} className={`px-5 py-3.5 text-sm font-medium whitespace-nowrap transition-all flex-shrink-0 relative ${activeSection === i ? "bg-indigo-500/10 text-indigo-400" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"}`}>{s.title}{activeSection === i && <span className="absolute bottom-0 left-2 right-2 h-[3px] bg-indigo-500 rounded-full" />}</button>
                     ))}
                   </div>
                   {notes.sections[activeSection] && (() => {
@@ -606,11 +611,11 @@ export default function Home() {
                           {sec.difficulty && <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold ${diff.bg} ${diff.text}`}>{diff.label}</span>}
                           {sec.tldr && <p className="text-slate-400 text-sm italic flex-1">{sec.tldr}</p>}
                         </div>
-                        <EditText value={sec.content} onChange={v => updateSection(activeSection, "content", v)} className="text-slate-300 leading-relaxed" editMode={editMode} />
+                        <EditText value={sec.content} onChange={v => updateSection(activeSection, "content", v)} className="text-slate-600 dark:text-slate-200/90 leading-[1.8]" editMode={editMode} />
                         {sec.key_points?.length > 0 && (
                           <div><h4 className="text-indigo-400 font-semibold text-xs uppercase tracking-wider mb-2">Key Points</h4>
                             <ul className="space-y-1.5">{sec.key_points.map((pt, i) => (
-                              <li key={i} className="flex gap-2 text-slate-300 text-sm"><span className="text-indigo-400 mt-0.5 flex-shrink-0">&#9656;</span>
+                              <li key={i} className="flex gap-2 text-slate-600 dark:text-slate-200/85 text-sm leading-relaxed"><span className="text-indigo-400 mt-0.5 flex-shrink-0">&#9656;</span>
                                 {editMode ? <input value={pt} onChange={e => { const pts = [...sec.key_points]; pts[i] = e.target.value; updateSection(activeSection, "key_points", pts); }} className="flex-1 bg-indigo-500/5 border border-indigo-500/20 rounded-lg px-2 py-1 text-slate-200 focus:outline-none focus:ring-1 focus:ring-indigo-500/30" /> : <span>{pt}</span>}
                               </li>
                             ))}</ul>
@@ -618,7 +623,7 @@ export default function Home() {
                         )}
                         {sec.examples?.length > 0 && (
                           <div><h4 className="text-emerald-400 font-semibold text-xs uppercase tracking-wider mb-2">Real-World Examples</h4>
-                            {sec.examples.map((ex, i) => <div key={i} className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3.5 mb-2"><p className="text-slate-300 text-sm">{ex}</p></div>)}
+                            {sec.examples.map((ex, i) => <div key={i} className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3.5 mb-2"><p className="text-slate-600 dark:text-slate-200/85 text-sm leading-relaxed">{ex}</p></div>)}
                           </div>
                         )}
                         {sec.connections && <div className="bg-violet-500/5 border border-violet-500/15 rounded-xl p-3.5"><h4 className="text-violet-400 font-semibold text-xs uppercase tracking-wider mb-1">Connections</h4><p className="text-slate-400 text-sm">{sec.connections}</p></div>}
@@ -770,7 +775,7 @@ export default function Home() {
                 {/* Summary */}
                 <div ref={el => { sectionRefs.current["summary"] = el; }}><GlassCard>
                   <SectionTitle><span className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-sm">🎯</span>Summary</SectionTitle>
-                  <EditText value={notes.summary} onChange={v => updateNotes(n => ({ ...n, summary: v }))} className="text-slate-300 leading-relaxed" editMode={editMode} />
+                  <EditText value={notes.summary} onChange={v => updateNotes(n => ({ ...n, summary: v }))} className="text-slate-600 dark:text-slate-200/90 leading-[1.8]" editMode={editMode} />
                 </GlassCard></div>
 
                 {/* Further Reading */}
