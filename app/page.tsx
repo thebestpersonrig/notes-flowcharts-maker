@@ -31,6 +31,7 @@ interface NotesContent {
   pros_cons: { applicable: boolean; context: string; pros: string[]; cons: string[] };
   timeline: { applicable: boolean; events: { year: string; event: string; significance: string }[] };
   process_flow: { applicable: boolean; title: string; steps: { step: number; title: string; description: string }[] };
+  mermaid_diagram?: string;
   practice_problems: { problem: string; hint: string; answer: string }[];
   key_terms: { term: string; definition: string }[];
   summary: string;
@@ -119,7 +120,6 @@ export default function Home() {
   const [heroImage, setHeroImage] = useState<string | null>(null);
   const [heroImageLoading, setHeroImageLoading] = useState(false);
   const [heroSource, setHeroSource] = useState<"web" | "ai" | null>(null);
-  const [showVisuals, setShowVisuals] = useState(true);
 
   const [attachment, setAttachment] = useState<{ name: string; size: number; base64: string; mime: string } | null>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -131,7 +131,7 @@ export default function Home() {
 
   const resultsRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const hasFlowchart = notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0;
+  const hasFlowchart = notes?.mermaid_diagram || (notes?.process_flow?.applicable && (notes.process_flow.steps?.length ?? 0) > 0);
 
   function scrollToSection(id: string) {
     // Expand section if collapsed, then scroll
@@ -212,7 +212,7 @@ export default function Home() {
       if (!res.ok) throw new Error(data?.error || "Generation failed");
       setNotes(data); setActiveSection(0); saveToHistory(data);
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-      if (showVisuals) generateHeroImage(data.title);
+      generateHeroImage(data.title);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Something went wrong";
       if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429") || msg.toLowerCase().includes("too many")) {
@@ -415,12 +415,6 @@ export default function Home() {
                     <option value="">Grade</option>
                     {GRADES.map(g => <option key={g.value} value={g.value}>{g.label}</option>)}
                   </select>
-                  {/* Visuals toggle */}
-                  <button type="button" onClick={() => setShowVisuals(!showVisuals)}
-                    className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl text-sm font-medium border transition-all ${showVisuals ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" : "border-white/10 text-slate-500 hover:bg-white/5"}`}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                    {showVisuals ? "Visuals" : "No visuals"}
-                  </button>
                   {/* Length segmented control — full row on mobile */}
                   <div className="flex rounded-xl border border-white/10 overflow-hidden bg-white/5 col-span-2 sm:col-span-1">
                     {([
@@ -799,12 +793,14 @@ export default function Home() {
             {/* ═══ FLOWCHART ═════════════════════════════════════ */}
             {activeTab === "flowchart" && hasFlowchart && (
               <GlassCard className="tab-content">
-                <SectionTitle>{notes.process_flow.title}</SectionTitle>
-                <p className="text-slate-400 text-sm mb-4">Visual representation of the process flow</p>
-                <Flowchart steps={notes.process_flow.steps} isDark={theme === "dark"} />
-                <div className="mt-6 border-t border-white/5 pt-4 space-y-2">{notes.process_flow.steps.map((step, i) => (
-                  <div key={i} className="flex gap-3 text-sm"><span className="flex-shrink-0 w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">{step.step}</span><div><span className="text-white font-medium">{step.title}:</span> <span className="text-slate-400">{step.description}</span></div></div>
-                ))}</div>
+                <SectionTitle>{notes.process_flow?.title || "Flowchart"}</SectionTitle>
+                <p className="text-slate-400 text-sm mb-4">Visual diagram of key concepts and relationships</p>
+                <Flowchart mermaidCode={notes.mermaid_diagram} steps={notes.process_flow?.steps} isDark={theme === "dark"} />
+                {notes.process_flow?.steps?.length > 0 && (
+                  <div className="mt-6 border-t border-white/5 pt-4 space-y-2">{notes.process_flow.steps.map((step, i) => (
+                    <div key={i} className="flex gap-3 text-sm"><span className="flex-shrink-0 w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center text-xs font-bold">{step.step}</span><div><span className="text-white font-medium">{step.title}:</span> <span className="text-slate-400">{step.description}</span></div></div>
+                  ))}</div>
+                )}
               </GlassCard>
             )}
 

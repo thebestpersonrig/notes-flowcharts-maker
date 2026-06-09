@@ -277,6 +277,7 @@ Return ONLY valid JSON (no markdown, no code fences, no text before or after the
     "title": "How [Process] Works",
     "steps": [{"step": 1, "title": "Step name", "description": "What happens and why it matters"}]
   },
+  "mermaid_diagram": "graph TD\\n    A[Start] --> B{Decision}\\n    B -->|Yes| C[Result 1]\\n    B -->|No| D[Result 2]",
   "practice_problems": [
     {"problem": "A thoughtful question that tests genuine understanding", "hint": "A useful nudge toward the answer", "answer": "A complete, well-explained answer"}
   ],
@@ -291,6 +292,7 @@ OUTPUT RULES:
 - pros_cons.applicable = true ONLY if the topic genuinely involves choices or tradeoffs. False for pure knowledge topics.
 - timeline.applicable = true if the topic has ANY historical development, key dates, or evolution over time. Most topics do — lean toward true.
 - process_flow.applicable = true if you can describe the topic as a sequence of steps, stages, phases, or a cycle. This includes biological processes, algorithms, historical progressions, cause-and-effect chains, how-things-work explanations, etc. LEAN TOWARD TRUE — most topics have at least one process worth diagramming.
+- mermaid_diagram: ALWAYS generate a valid Mermaid.js flowchart string. This is the MAIN visual diagram for the topic. It should NOT be a simple linear chain — use decision diamonds {Decision?}, branching paths, parallel processes, loops, and subgraphs where appropriate. Use descriptive labels on edges. Use different node shapes: [Rectangle] for processes, {Diamond} for decisions, ([Stadium]) for start/end, [(Cylinder)] for data. Aim for 8-15 nodes minimum. Make it a genuinely useful visual summary of the topic's key concepts and relationships, not just a list of steps. Use \\n for newlines in the string. Escape all double quotes inside node labels with single quotes. Do NOT use parentheses, brackets, or special chars inside node labels except the Mermaid shape delimiters.
 - 3-5 common_misconceptions — things students ACTUALLY confuse or get wrong on tests. Not obscure trivia.
 - 3-5 analogies — each analogy MUST compare to something a teenager would encounter daily (food, sports, social media, school, video games, their phone). Never use abstract analogies.
 - 3-5 practice_problems — mix of difficulty: 1 recall, 2 application ("what would happen if..."), 1-2 analysis ("why does X cause Y instead of Z?")
