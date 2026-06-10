@@ -15,19 +15,15 @@ interface MathFieldProps {
   onReady?: (mf: MF) => void;
 }
 
-// Load MathLive via a runtime script tag — this completely bypasses the bundler
-// which otherwise resolves to the SSR build that lacks custom element registration
+// Load MathLive via a runtime script tag — bypasses the bundler
+// which resolves to the SSR build that lacks custom element registration
 function loadMathLiveScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    // If already loaded, resolve immediately
     if (customElements.get("math-field")) {
       resolve();
       return;
     }
-
-    // Check if script is already loading
-    if (document.querySelector('script[data-mathlive]')) {
-      // Wait for it
+    if (document.querySelector("script[data-mathlive]")) {
       customElements.whenDefined("math-field").then(() => resolve()).catch(reject);
       return;
     }
@@ -35,71 +31,52 @@ function loadMathLiveScript(): Promise<void> {
     const script = document.createElement("script");
     script.setAttribute("data-mathlive", "true");
     script.type = "module";
-    // Use the installed package through Next.js static serving or CDN
     script.textContent = `
       import('https://unpkg.com/mathlive@0.110.0/mathlive.min.mjs')
         .then(ml => {
           if (ml.MathfieldElement) ml.MathfieldElement.soundsDirectory = null;
-          window.__mathliveLoaded = true;
           window.dispatchEvent(new Event('mathlive-ready'));
         })
-        .catch(err => {
-          console.error('MathLive CDN load failed:', err);
-          window.dispatchEvent(new Event('mathlive-failed'));
-        });
+        .catch(() => window.dispatchEvent(new Event('mathlive-failed')));
     `;
     document.head.appendChild(script);
 
-    const onReady = () => {
-      cleanup();
-      resolve();
-    };
-    const onFailed = () => {
-      cleanup();
-      reject(new Error("MathLive failed to load"));
-    };
+    const onReady = () => { cleanup(); resolve(); };
+    const onFailed = () => { cleanup(); reject(new Error("MathLive failed to load")); };
     const cleanup = () => {
       window.removeEventListener("mathlive-ready", onReady);
       window.removeEventListener("mathlive-failed", onFailed);
     };
-
     window.addEventListener("mathlive-ready", onReady);
     window.addEventListener("mathlive-failed", onFailed);
-
-    // Timeout after 8 seconds
     setTimeout(() => {
       cleanup();
-      // Check one more time
       if (customElements.get("math-field")) resolve();
       else reject(new Error("MathLive load timeout"));
     }, 8000);
   });
 }
 
-// This component MUST be loaded with dynamic(() => ..., { ssr: false })
 export default function MathField({ value, onChange, placeholder, onReady }: MathFieldProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mfRef = useRef<MF | null>(null);
   const onChangeRef = useRef(onChange);
   const onReadyRef = useRef(onReady);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
+  const [showPlaceholder, setShowPlaceholder] = useState(true);
   onChangeRef.current = onChange;
   onReadyRef.current = onReady;
 
-  // Fallback textarea handler
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
   const handleFallbackInsert = useCallback((text: string) => {
     const el = fallbackRef.current;
     if (!el) return;
     const start = el.selectionStart;
     const end = el.selectionEnd;
-    const before = value.slice(0, start);
-    const after = value.slice(end);
-    onChange(before + text + after);
+    onChange(value.slice(0, start) + text + value.slice(end));
     requestAnimationFrame(() => {
       el.focus();
-      const pos = start + text.length;
-      el.setSelectionRange(pos, pos);
+      el.setSelectionRange(start + text.length, start + text.length);
     });
   }, [value, onChange]);
 
@@ -110,49 +87,67 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
     (async () => {
       try {
         await loadMathLiveScript();
-
         if (cancelled || !containerRef.current) return;
-
-        // Wait for custom element to be defined
         await customElements.whenDefined("math-field");
-
         if (cancelled || !containerRef.current) return;
 
         const mf = document.createElement("math-field") as MF;
+
+        // Disable built-in UI we don't want
         mf.setAttribute("virtual-keyboard-mode", "off");
         mf.setAttribute("smart-mode", "true");
-        if (placeholder) mf.setAttribute("placeholder", placeholder);
+        // Do NOT set placeholder — MathLive renders it as math (no spaces)
 
         mf.style.cssText = `
           display: block;
           width: 100%;
-          font-size: 1.3rem;
-          min-height: 64px;
-          padding: 14px 16px;
+          font-size: 1.25rem;
+          min-height: 60px;
+          padding: 16px 18px;
           border-radius: 12px;
           border: 1px solid rgba(255,255,255,0.1);
           background: rgba(255,255,255,0.03);
           color: #f1f5f9;
           outline: none;
           --caret-color: #6ee7b7;
-          --selection-background-color: rgba(99,102,241,0.3);
+          --selection-background-color: rgba(16,185,129,0.25);
           --contains-highlight-background-color: transparent;
           --primary-color: #6ee7b7;
           --smart-fence-color: #818cf8;
-          --placeholder-color: #64748b;
           --text-font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         `;
 
+        // Hide keyboard toggle and menu via shadow DOM style injection
+        const hideUI = () => {
+          if (mf.shadowRoot) {
+            const s = document.createElement("style");
+            s.textContent = `
+              .ML__virtual-keyboard-toggle,
+              [part="virtual-keyboard-toggle"],
+              .ML__menu-toggle,
+              [part="menu-toggle"] {
+                display: none !important;
+              }
+            `;
+            mf.shadowRoot.appendChild(s);
+          }
+        };
+
         mf.addEventListener("input", () => {
-          if (mf) onChangeRef.current(mf.value);
+          if (mf) {
+            onChangeRef.current(mf.value);
+            setShowPlaceholder(!mf.value);
+          }
         });
         mf.addEventListener("focus", () => {
+          setShowPlaceholder(false);
           if (mf) {
             mf.style.borderColor = "rgba(16,185,129,0.4)";
-            mf.style.boxShadow = "0 0 0 2px rgba(16,185,129,0.15)";
+            mf.style.boxShadow = "0 0 0 3px rgba(16,185,129,0.1)";
           }
         });
         mf.addEventListener("blur", () => {
+          setShowPlaceholder(!mf.value);
           if (mf) {
             mf.style.borderColor = "rgba(255,255,255,0.1)";
             mf.style.boxShadow = "none";
@@ -163,7 +158,14 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
           containerRef.current.innerHTML = "";
           containerRef.current.appendChild(mf);
           mfRef.current = mf;
+
+          // Try hiding UI immediately, and again after a tick (shadow DOM may populate late)
+          hideUI();
+          requestAnimationFrame(hideUI);
+          setTimeout(hideUI, 200);
+
           setStatus("ready");
+          setShowPlaceholder(!value);
           if (onReadyRef.current) onReadyRef.current(mf);
         }
       } catch (err) {
@@ -172,22 +174,18 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
       }
     })();
 
-    return () => {
-      cancelled = true;
-      mfRef.current = null;
-    };
+    return () => { cancelled = true; mfRef.current = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync value from parent
   useEffect(() => {
     const mf = mfRef.current;
     if (mf && mf.value !== value) {
       mf.value = value;
+      setShowPlaceholder(!value);
     }
   }, [value]);
 
-  // Fallback textarea when MathLive fails
   if (status === "failed") {
     return (
       <textarea
@@ -197,21 +195,28 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
         placeholder={placeholder}
         rows={2}
         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-lg font-mono text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition resize-none"
-        onKeyDown={e => {
-          if (e.key === "Enter" && !e.shiftKey) e.preventDefault();
-        }}
+        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) e.preventDefault(); }}
       />
     );
   }
 
   return (
-    <>
+    <div className="relative">
       {status === "loading" && (
-        <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 min-h-[64px] flex items-center text-slate-500 font-mono animate-pulse">
+        <div className="w-full bg-white/5 border border-white/10 rounded-xl px-[18px] py-4 min-h-[60px] flex items-center text-slate-500 text-sm animate-pulse">
           Loading math editor...
         </div>
       )}
       <div ref={containerRef} style={{ display: status === "loading" ? "none" : "block" }} />
-    </>
+      {/* Custom placeholder overlay — MathLive's built-in one renders as math with no spaces */}
+      {status === "ready" && showPlaceholder && (
+        <div
+          className="absolute left-[18px] top-1/2 -translate-y-1/2 text-slate-500 text-sm pointer-events-none select-none"
+          style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+        >
+          {placeholder}
+        </div>
+      )}
+    </div>
   );
 }

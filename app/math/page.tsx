@@ -46,27 +46,31 @@ const OPERATIONS = [
 ];
 
 const MATH_CONTROLS = [
-  { label: "x²", latex: "^{2}", title: "Square" },
-  { label: "xⁿ", latex: "^{#0}", title: "Exponent" },
-  { label: "a/b", latex: "\\frac{#0}{#?}", title: "Fraction" },
-  { label: "√", latex: "\\sqrt{#0}", title: "Square root" },
-  { label: "∛", latex: "\\sqrt[3]{#0}", title: "Cube root" },
-  { label: "π", latex: "\\pi ", title: "Pi" },
-  { label: "∞", latex: "\\infty ", title: "Infinity" },
-  { label: "±", latex: "\\pm ", title: "Plus/minus" },
-  { label: "÷", latex: "\\div ", title: "Divide" },
-  { label: "×", latex: "\\times ", title: "Multiply" },
-  { label: "()", latex: "\\left(#0\\right)", title: "Parentheses" },
-  { label: "||", latex: "\\left|#0\\right|", title: "Absolute value" },
-  { label: "log", latex: "\\log\\left(#0\\right)", title: "Logarithm" },
-  { label: "ln", latex: "\\ln\\left(#0\\right)", title: "Natural log" },
-  { label: "sin", latex: "\\sin\\left(#0\\right)", title: "Sine" },
-  { label: "cos", latex: "\\cos\\left(#0\\right)", title: "Cosine" },
-  { label: "tan", latex: "\\tan\\left(#0\\right)", title: "Tangent" },
-  { label: "≤", latex: "\\le ", title: "Less than or equal" },
-  { label: "≥", latex: "\\ge ", title: "Greater than or equal" },
-  { label: "≠", latex: "\\ne ", title: "Not equal" },
-  { label: "θ", latex: "\\theta ", title: "Theta" },
+  // Structures
+  { label: "x²", latex: "^{2}", title: "Square", group: "struct" },
+  { label: "xⁿ", latex: "^{#0}", title: "Exponent", group: "struct" },
+  { label: "a/b", latex: "\\frac{#0}{#?}", title: "Fraction", group: "struct" },
+  { label: "√", latex: "\\sqrt{#0}", title: "Square root", group: "struct" },
+  { label: "∛", latex: "\\sqrt[3]{#0}", title: "Cube root", group: "struct" },
+  { label: "()", latex: "\\left(#0\\right)", title: "Parentheses", group: "struct" },
+  { label: "||", latex: "\\left|#0\\right|", title: "Absolute value", group: "struct" },
+  // Operators & symbols
+  { label: "×", latex: "\\times ", title: "Multiply", group: "op" },
+  { label: "÷", latex: "\\div ", title: "Divide", group: "op" },
+  { label: "±", latex: "\\pm ", title: "Plus/minus", group: "op" },
+  { label: "π", latex: "\\pi ", title: "Pi", group: "op" },
+  { label: "∞", latex: "\\infty ", title: "Infinity", group: "op" },
+  { label: "θ", latex: "\\theta ", title: "Theta", group: "op" },
+  // Functions
+  { label: "sin", latex: "\\sin\\left(#0\\right)", title: "Sine", group: "fn" },
+  { label: "cos", latex: "\\cos\\left(#0\\right)", title: "Cosine", group: "fn" },
+  { label: "tan", latex: "\\tan\\left(#0\\right)", title: "Tangent", group: "fn" },
+  { label: "log", latex: "\\log\\left(#0\\right)", title: "Logarithm", group: "fn" },
+  { label: "ln", latex: "\\ln\\left(#0\\right)", title: "Natural log", group: "fn" },
+  // Comparisons
+  { label: "≤", latex: "\\le ", title: "Less than or equal", group: "cmp" },
+  { label: "≥", latex: "\\ge ", title: "Greater than or equal", group: "cmp" },
+  { label: "≠", latex: "\\ne ", title: "Not equal", group: "cmp" },
 ];
 
 const EXAMPLES = [
@@ -257,26 +261,32 @@ export default function MathSolver() {
         {!loading && (
           <div className={`glass-strong rounded-2xl p-5 sm:p-6 mb-6 animate-fadeInUp ${solution ? "" : ""}`}>
 
-            {/* Math Controls */}
-            <div className="flex flex-wrap gap-1 mb-3">
-              {MATH_CONTROLS.map(ctrl => (
-                <button
-                  key={ctrl.label}
-                  type="button"
-                  onClick={() => insertMath(ctrl.latex)}
-                  title={ctrl.title}
-                  className="px-2 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/5 border border-white/10 text-slate-300 hover:bg-indigo-500/15 hover:text-indigo-300 hover:border-indigo-500/30 transition-all active:scale-95"
-                >
-                  {ctrl.label}
-                </button>
-              ))}
+            {/* Math Controls — grouped */}
+            <div className="flex flex-wrap items-center gap-1 mb-4">
+              {MATH_CONTROLS.map((ctrl, i) => {
+                const prev = i > 0 ? MATH_CONTROLS[i - 1] : null;
+                const showSep = prev && prev.group !== ctrl.group;
+                return (
+                  <span key={ctrl.label} className="contents">
+                    {showSep && <span className="w-px h-5 bg-white/10 mx-1 hidden sm:inline-block" />}
+                    <button
+                      type="button"
+                      onClick={() => insertMath(ctrl.latex)}
+                      title={ctrl.title}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:bg-emerald-500/15 hover:text-emerald-300 hover:border-emerald-500/30 transition-all active:scale-95"
+                    >
+                      {ctrl.label}
+                    </button>
+                  </span>
+                );
+              })}
             </div>
 
             {/* Expression Input — MathLive WYSIWYG */}
             <DynamicMathField
               value={expression}
               onChange={handleExpressionChange}
-              placeholder="Type your math expression — e.g. x^2 + 5x + 6 = 0"
+              placeholder="Type a math expression, e.g.  x² + 5x + 6 = 0"
               onReady={(mf: MF) => setMathFieldEl(mf)}
             />
 
