@@ -1,6 +1,30 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
+const QUICK_PROMPT = `You are a world-class mathematician. You solve math problems with perfect accuracy and give ONLY the final answer — no steps, no explanation, no verification.
+
+CRITICAL RULES:
+1. Return ONLY the final answer. No working, no steps, no explanation.
+2. DOUBLE-CHECK your arithmetic internally. Do not make calculation errors.
+3. If there are multiple solutions, list ALL of them.
+
+FORMATTING — VERY IMPORTANT:
+- NEVER use LaTeX commands like \\times \\quad \\frac \\sqrt \\cdot \\left \\right \\text etc.
+- Use PLAIN TEXT with Unicode symbols instead:
+  × for multiply, ÷ for divide, √ for square root, ² ³ for exponents, ± for plus-minus
+  → for arrows, ≤ ≥ ≠ for comparisons, · for dot multiply, π for pi, ∞ for infinity
+- Write fractions as (a)/(b) or a/b
+- Write exponents as x^2 or x²
+
+You MUST respond with valid JSON in this exact format:
+{
+  "expression_formatted": "The expression in clean notation",
+  "operation": "What operation was performed",
+  "result": "The final answer, clearly and completely stated"
+}
+
+Return ONLY the JSON object, no markdown fences, no extra text.`;
+
 const ANSWER_PROMPT = `You are a world-class mathematician. You solve math problems with perfect accuracy and give a concise answer with only the key steps.
 
 CRITICAL RULES:
@@ -113,9 +137,16 @@ export async function POST(req: NextRequest) {
     }
 
     const isExplain = mode === "explain";
-    const systemPrompt = isExplain ? EXPLAIN_PROMPT : ANSWER_PROMPT;
+    const isQuick = mode === "quick";
+    const systemPrompt = isQuick ? QUICK_PROMPT : isExplain ? EXPLAIN_PROMPT : ANSWER_PROMPT;
 
-    const userPrompt = `${operation} the following expression${isExplain ? ". Explain every step in detail" : ". Give a concise solution with key steps only"}.
+    const modeInstruction = isQuick
+      ? ". Give ONLY the final answer — no steps, no explanation"
+      : isExplain
+        ? ". Explain every step in detail"
+        : ". Give a concise solution with key steps only";
+
+    const userPrompt = `${operation} the following expression${modeInstruction}.
 
 Expression: ${expression.trim()}
 
@@ -129,7 +160,7 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: isExplain ? 4000 : 2000,
+      max_tokens: isQuick ? 800 : isExplain ? 4000 : 2000,
       temperature: 0.1,
     });
 
@@ -166,7 +197,7 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
     }
 
     // Validate required fields
-    if (!data.steps || !Array.isArray(data.steps) || data.steps.length === 0) {
+    if (!isQuick && (!data.steps || !Array.isArray(data.steps) || data.steps.length === 0)) {
       return NextResponse.json(
         { error: "AI returned an incomplete solution. Please try again." },
         { status: 502 }
@@ -178,6 +209,12 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
         { error: "AI did not return a final answer. Please try again." },
         { status: 502 }
       );
+    }
+
+    // For quick mode, ensure no steps leak through
+    if (isQuick) {
+      data.steps = [];
+      data.verification = "";
     }
 
     return NextResponse.json(data);

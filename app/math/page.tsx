@@ -354,18 +354,24 @@ export default function MathSolver() {
                 {OPERATIONS.find(o => o.id === operation)?.icon} {OPERATIONS.find(o => o.id === operation)?.label} — how detailed?
               </p>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-3 gap-3">
+              <button onClick={() => selectMode("quick")}
+                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-rose-500/30 hover:bg-rose-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
+                <span className="text-3xl">🎯</span>
+                <span className="text-base font-bold text-slate-200 group-hover:text-rose-300 transition">Just Answer</span>
+                <span className="text-xs text-slate-500 leading-tight text-center">Only the final answer</span>
+              </button>
               <button onClick={() => selectMode("answer")}
                 className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
                 <span className="text-3xl">⚡</span>
                 <span className="text-base font-bold text-slate-200 group-hover:text-amber-300 transition">Answer</span>
-                <span className="text-xs text-slate-500 leading-tight text-center">Quick answer with key steps</span>
+                <span className="text-xs text-slate-500 leading-tight text-center">Answer with key steps</span>
               </button>
               <button onClick={() => selectMode("explain")}
                 className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
                 <span className="text-3xl">📝</span>
                 <span className="text-base font-bold text-slate-200 group-hover:text-emerald-300 transition">Explain</span>
-                <span className="text-xs text-slate-500 leading-tight text-center">Detailed step-by-step explanation</span>
+                <span className="text-xs text-slate-500 leading-tight text-center">Full step-by-step breakdown</span>
               </button>
             </div>
           </div>
@@ -391,7 +397,7 @@ export default function MathSolver() {
             <p className="font-semibold text-white text-lg">Solving...</p>
             <p className="text-slate-400 text-sm mt-1">
               {OPERATIONS.find(o => o.id === operation)?.icon}{" "}
-              {OPERATIONS.find(o => o.id === operation)?.label} — {mode === "explain" ? "building explanation..." : "getting answer..."}
+              {OPERATIONS.find(o => o.id === operation)?.label} — {mode === "explain" ? "building explanation..." : mode === "quick" ? "getting answer..." : "solving with key steps..."}
             </p>
             <p className="text-slate-500 text-xs mt-2 tabular-nums">{elapsed}s</p>
           </div>
@@ -415,7 +421,8 @@ export default function MathSolver() {
               </div>
             </div>
 
-            {/* Steps */}
+            {/* Steps — hidden in quick mode */}
+            {solution.steps && solution.steps.length > 0 && (
             <div className="glass rounded-2xl p-5 sm:p-6">
               <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
                 <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📝</span>
@@ -447,6 +454,7 @@ export default function MathSolver() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Result */}
             <div className="glass rounded-2xl p-5 sm:p-6 border-emerald-500/20 bg-emerald-500/[0.03]">
