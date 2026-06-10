@@ -2,6 +2,23 @@
 
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
+
+// SSR-safe MathLive import — only loads on the client
+const DynamicMathField = dynamic(() => import("../components/MathField"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 min-h-[64px] flex items-center text-slate-500 font-mono animate-pulse">
+      Loading math editor...
+    </div>
+  ),
+});
+
+interface MF {
+  insert: (latex: string, options?: Record<string, unknown>) => void;
+  focus: () => void;
+  value: string;
+}
 
 interface Step {
   step: number;
@@ -29,37 +46,38 @@ const OPERATIONS = [
 ];
 
 const MATH_CONTROLS = [
-  { label: "x²", insert: "^2", title: "Square" },
-  { label: "xⁿ", insert: "^", title: "Exponent" },
-  { label: "√", insert: "sqrt(", title: "Square root" },
-  { label: "∛", insert: "cbrt(", title: "Cube root" },
-  { label: "π", insert: "π", title: "Pi" },
-  { label: "∞", insert: "∞", title: "Infinity" },
-  { label: "±", insert: "±", title: "Plus/minus" },
-  { label: "÷", insert: "÷", title: "Divide" },
-  { label: "×", insert: "×", title: "Multiply" },
-  { label: "()", insert: "()", title: "Parentheses", cursorOffset: -1 },
-  { label: "||", insert: "||", title: "Absolute value", cursorOffset: -1 },
-  { label: "log", insert: "log(", title: "Logarithm" },
-  { label: "ln", insert: "ln(", title: "Natural log" },
-  { label: "sin", insert: "sin(", title: "Sine" },
-  { label: "cos", insert: "cos(", title: "Cosine" },
-  { label: "tan", insert: "tan(", title: "Tangent" },
-  { label: "≤", insert: "≤", title: "Less than or equal" },
-  { label: "≥", insert: "≥", title: "Greater than or equal" },
-  { label: "≠", insert: "≠", title: "Not equal" },
-  { label: "θ", insert: "θ", title: "Theta" },
+  { label: "x²", latex: "^{2}", title: "Square" },
+  { label: "xⁿ", latex: "^{#0}", title: "Exponent" },
+  { label: "a/b", latex: "\\frac{#0}{#?}", title: "Fraction" },
+  { label: "√", latex: "\\sqrt{#0}", title: "Square root" },
+  { label: "∛", latex: "\\sqrt[3]{#0}", title: "Cube root" },
+  { label: "π", latex: "\\pi ", title: "Pi" },
+  { label: "∞", latex: "\\infty ", title: "Infinity" },
+  { label: "±", latex: "\\pm ", title: "Plus/minus" },
+  { label: "÷", latex: "\\div ", title: "Divide" },
+  { label: "×", latex: "\\times ", title: "Multiply" },
+  { label: "()", latex: "\\left(#0\\right)", title: "Parentheses" },
+  { label: "||", latex: "\\left|#0\\right|", title: "Absolute value" },
+  { label: "log", latex: "\\log\\left(#0\\right)", title: "Logarithm" },
+  { label: "ln", latex: "\\ln\\left(#0\\right)", title: "Natural log" },
+  { label: "sin", latex: "\\sin\\left(#0\\right)", title: "Sine" },
+  { label: "cos", latex: "\\cos\\left(#0\\right)", title: "Cosine" },
+  { label: "tan", latex: "\\tan\\left(#0\\right)", title: "Tangent" },
+  { label: "≤", latex: "\\le ", title: "Less than or equal" },
+  { label: "≥", latex: "\\ge ", title: "Greater than or equal" },
+  { label: "≠", latex: "\\ne ", title: "Not equal" },
+  { label: "θ", latex: "\\theta ", title: "Theta" },
 ];
 
 const EXAMPLES = [
-  "x^2 + 5x + 6 = 0",
-  "3x + 7 = 22",
-  "sin(π/4)",
-  "d/dx (x^3 + 2x)",
-  "(2x + 3)(x - 5)",
-  "∫ 2x dx",
-  "x^2 - 9",
-  "lim x→0 sin(x)/x",
+  { display: "x² + 5x + 6 = 0", latex: "x^{2}+5x+6=0" },
+  { display: "3x + 7 = 22", latex: "3x+7=22" },
+  { display: "sin(π/4)", latex: "\\sin\\left(\\frac{\\pi}{4}\\right)" },
+  { display: "d/dx (x³ + 2x)", latex: "\\frac{d}{dx}\\left(x^{3}+2x\\right)" },
+  { display: "(2x + 3)(x − 5)", latex: "\\left(2x+3\\right)\\left(x-5\\right)" },
+  { display: "∫ 2x dx", latex: "\\int 2x\\,dx" },
+  { display: "x² − 9", latex: "x^{2}-9" },
+  { display: "lim x→0 sin(x)/x", latex: "\\lim_{x\\to 0}\\frac{\\sin\\left(x\\right)}{x}" },
 ];
 
 // Clean any LaTeX that slips through from AI
@@ -101,7 +119,7 @@ export default function MathSolver() {
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
   const [history, setHistory] = useState<{ expr: string; op: string; result: string }[]>([]);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [mathFieldEl, setMathFieldEl] = useState<MF | null>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -121,21 +139,17 @@ export default function MathSolver() {
     return () => clearInterval(i);
   }, [loading]);
 
-  function insertAtCursor(text: string, cursorOffset = 0) {
-    const el = inputRef.current;
-    if (!el) { setExpression(p => p + text); return; }
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const before = expression.slice(0, start);
-    const after = expression.slice(end);
-    const newVal = before + text + after;
-    setExpression(newVal);
-    // Set cursor position after React re-render
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = start + text.length + cursorOffset;
-      el.setSelectionRange(pos, pos);
-    });
+  function insertMath(latex: string) {
+    if (mathFieldEl) {
+      mathFieldEl.insert(latex, { focus: true });
+    }
+  }
+
+  function handleExpressionChange(latex: string) {
+    setExpression(latex);
+    setSolution(null);
+    setOperation(null);
+    setMode(null);
   }
 
   function selectOperation(opId: string) {
@@ -197,16 +211,16 @@ export default function MathSolver() {
     setSolution(null);
     setError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(() => inputRef.current?.focus(), 100);
+    setTimeout(() => mathFieldEl?.focus(), 100);
   }
 
-  function loadExample(ex: string) {
-    setExpression(ex);
+  function loadExample(latex: string) {
+    setExpression(latex);
     setOperation(null);
     setMode(null);
     setSolution(null);
     setError("");
-    inputRef.current?.focus();
+    setTimeout(() => mathFieldEl?.focus(), 50);
   }
 
   const showOperations = expression.trim().length > 0 && !operation && !loading && !solution;
@@ -249,7 +263,7 @@ export default function MathSolver() {
                 <button
                   key={ctrl.label}
                   type="button"
-                  onClick={() => insertAtCursor(ctrl.insert, ctrl.cursorOffset || 0)}
+                  onClick={() => insertMath(ctrl.latex)}
                   title={ctrl.title}
                   className="px-2 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/5 border border-white/10 text-slate-300 hover:bg-indigo-500/15 hover:text-indigo-300 hover:border-indigo-500/30 transition-all active:scale-95"
                 >
@@ -258,19 +272,12 @@ export default function MathSolver() {
               ))}
             </div>
 
-            {/* Expression Input */}
-            <textarea
-              ref={inputRef}
+            {/* Expression Input — MathLive WYSIWYG */}
+            <DynamicMathField
               value={expression}
-              onChange={e => { setExpression(e.target.value); setSolution(null); setOperation(null); setMode(null); }}
+              onChange={handleExpressionChange}
               placeholder="Type your math expression — e.g. x^2 + 5x + 6 = 0"
-              rows={2}
-              className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3.5 text-lg font-mono text-slate-900 dark:text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500/40 transition resize-none"
-              onKeyDown={e => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                }
-              }}
+              onReady={(mf: MF) => setMathFieldEl(mf)}
             />
 
             {/* Examples */}
@@ -279,9 +286,9 @@ export default function MathSolver() {
                 <p className="text-xs text-slate-500 mb-2">Try an example:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {EXAMPLES.map(ex => (
-                    <button key={ex} onClick={() => loadExample(ex)}
+                    <button key={ex.display} onClick={() => loadExample(ex.latex)}
                       className="px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/8 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/20 transition">
-                      {ex}
+                      {ex.display}
                     </button>
                   ))}
                 </div>
