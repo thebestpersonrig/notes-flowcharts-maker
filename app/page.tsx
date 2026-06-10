@@ -56,7 +56,7 @@ export default function Home() {
         </div>
 
         {/* Tool Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 w-full max-w-2xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 w-full max-w-4xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
 
           {/* Notes Card */}
           <Link href="/notes" className="group glass rounded-2xl p-6 sm:p-8 hover:glow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-indigo-500/30">
@@ -65,7 +65,7 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Notes Generator</h3>
             <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-4">
-              Generate comprehensive study notes with examples, analogies, flowcharts, quizzes, and Word export.
+              Generate comprehensive study notes with examples, analogies, flowcharts, and Word export.
             </p>
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-500 dark:text-indigo-400 group-hover:gap-2.5 transition-all">
               Open Notes
@@ -80,10 +80,25 @@ export default function Home() {
             </div>
             <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Math Solver</h3>
             <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-4">
-              Solve math problems step-by-step with AI. Type or snap a photo of any problem for a detailed solution.
+              Solve math problems step-by-step with AI. Type any expression for a detailed solution.
             </p>
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-500 dark:text-emerald-400 group-hover:gap-2.5 transition-all">
               Open Math
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            </span>
+          </Link>
+
+          {/* Quiz Card */}
+          <Link href="/quiz" className="group glass rounded-2xl p-6 sm:p-8 hover:glow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-amber-500/30">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center shadow-lg shadow-amber-500/25 group-hover:shadow-amber-500/40 transition-shadow mb-5">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Quiz Generator</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-4">
+              Test your knowledge on any topic with AI-generated multiple choice quizzes.
+            </p>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-500 dark:text-amber-400 group-hover:gap-2.5 transition-all">
+              Open Quiz
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
             </span>
           </Link>

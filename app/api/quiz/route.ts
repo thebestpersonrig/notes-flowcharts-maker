@@ -37,24 +37,39 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { notes, difficulty = "medium" } = await req.json();
-    if (!notes?.title) {
-      return NextResponse.json({ error: "Notes content required" }, { status: 400 });
+    const { notes, topic, difficulty = "medium", count = 5 } = await req.json();
+    if (!notes?.title && !topic?.trim()) {
+      return NextResponse.json({ error: "Topic or notes content required" }, { status: 400 });
     }
 
     const diffPrompt = DIFFICULTY_PROMPTS[difficulty] || DIFFICULTY_PROMPTS.medium;
+    const numQuestions = Math.min(Math.max(Number(count) || 5, 3), 15);
 
-    const summary = `Topic: ${notes.title}\n\nKey sections: ${notes.sections
-      .map((s: { title: string }) => s.title)
-      .join(", ")}\n\nKey terms: ${notes.key_terms
-      .map((t: { term: string; definition: string }) => `${t.term}: ${t.definition}`)
-      .join("; ")}\n\nSummary: ${notes.summary}`;
+    let prompt: string;
 
-    const prompt = `Based on these study notes, generate exactly 5 multiple-choice quiz questions.
+    if (notes?.title) {
+      // Generate from notes (existing flow)
+      const summary = `Topic: ${notes.title}\n\nKey sections: ${notes.sections
+        .map((s: { title: string }) => s.title)
+        .join(", ")}\n\nKey terms: ${notes.key_terms
+        .map((t: { term: string; definition: string }) => `${t.term}: ${t.definition}`)
+        .join("; ")}\n\nSummary: ${notes.summary}`;
+
+      prompt = `Based on these study notes, generate exactly ${numQuestions} multiple-choice quiz questions.
 
 ${summary}
 
+${diffPrompt}`;
+    } else {
+      // Generate from topic (standalone quiz)
+      prompt = `Generate exactly ${numQuestions} multiple-choice quiz questions about: "${topic.trim()}"
+
 ${diffPrompt}
+
+IMPORTANT: Questions should be factually accurate, educational, and appropriate for studying this topic. Cover different aspects of the topic — don't repeat the same subtopic.`;
+    }
+
+    prompt += `
 
 Return ONLY valid JSON (no markdown, no code fences):
 {
@@ -69,11 +84,10 @@ Return ONLY valid JSON (no markdown, no code fences):
 }
 
 Rules:
-- Exactly 5 questions, 4 options each
+- Exactly ${numQuestions} questions, 4 options each
 - "correct" is the 0-based index of the right answer
 - Vary the position of the correct answer (don't always make it A)
 - CRITICAL — Explanations must explain WHY the correct answer is right AND briefly explain why EACH wrong answer is wrong. Format: "Correct: [A] because [reason]. B is wrong because [reason]. C is wrong because [reason]. D is wrong because [reason]."
-- Questions must be answerable from the notes alone
 - Write questions that a student might actually see on an exam — not obscure trivia`;
 
     const message = await client.chat.completions.create({
