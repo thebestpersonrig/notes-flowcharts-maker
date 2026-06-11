@@ -51,12 +51,12 @@ export default function Home() {
             Study Smarter with<br /><span className="gradient-text">Learnix</span>
           </h2>
           <p className="text-slate-500 dark:text-slate-400 text-lg sm:text-xl max-w-2xl mx-auto leading-relaxed">
-            AI-powered study notes, flowcharts, quizzes, and step-by-step math solving. Everything you need to learn faster.
+            AI-powered study notes, flowcharts, quizzes, step-by-step math solving, and a personal AI teacher. Everything you need to learn faster.
           </p>
         </div>
 
         {/* Tool Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 w-full max-w-4xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 w-full max-w-5xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
 
           {/* Notes Card */}
           <Link href="/notes" className="group glass rounded-2xl p-6 sm:p-8 hover:glow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-indigo-500/30">
@@ -99,6 +99,21 @@ export default function Home() {
             </p>
             <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-500 dark:text-amber-400 group-hover:gap-2.5 transition-all">
               Open Quiz
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
+            </span>
+          </Link>
+
+          {/* AI Teacher Card */}
+          <Link href="/teacher" className="group glass rounded-2xl p-6 sm:p-8 hover:glow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-sky-500/30">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-sky-500 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25 group-hover:shadow-sky-500/40 transition-shadow mb-5">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            </div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">AI Teacher</h3>
+            <p className="text-slate-500 dark:text-slate-400 text-sm leading-relaxed mb-4">
+              Chat with a personal AI tutor that explains any concept step-by-step at your level.
+            </p>
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-sky-500 dark:text-sky-400 group-hover:gap-2.5 transition-all">
+              Open Teacher
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
             </span>
           </Link>
