@@ -305,3 +305,15 @@ button:has(+ .section-body):hover { background: rgba(255, 255, 255, 0.03); }
 :where(:not(.dark)) .border-white\/5 { border-color: rgba(99, 102, 241, 0.08); }
 :where(:not(.dark)) .hover\:bg-white\/10:hover { background: rgba(99, 102, 241, 0.08); }
 :where(:not(.dark)) .hover\:bg-white\/5:hover { background: rgba(99, 102, 241, 0.05); }
+
+/* ─── KaTeX math rendering (math solver) ───────── */
+/* KaTeX ships unlayered CSS, so override it here rather than with Tailwind utilities */
+.katex-block .katex-display {
+  margin: 0;
+}
+.katex-block .katex {
+  font-size: 1.12em;
+}
+.katex-block .katex-display > .katex {
+  white-space: normal; /* allow long results to wrap instead of overflowing */
+}

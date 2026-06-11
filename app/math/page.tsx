@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import { MathBlock, MathInline, MathText } from "../components/MathRender";
 
 // SSR-safe MathLive import — only loads on the client
 const DynamicMathField = dynamic(() => import("../components/MathField"), {
@@ -28,12 +29,20 @@ interface Step {
 }
 
 interface Solution {
-  expression_formatted: string;
+  expression_latex: string;
   operation: string;
-  steps: Step[];
+  steps?: Step[];
   result: string;
-  verification: string;
+  verification?: string;
 }
+
+interface HistoryItem {
+  expr: string;
+  op: string;
+  result: string;
+}
+
+const HISTORY_KEY = "learnix-math-history-v2";
 
 const OPERATIONS = [
   { id: "solve", label: "Solve", icon: "🔍", desc: "Find the value of unknowns" },
@@ -43,6 +52,12 @@ const OPERATIONS = [
   { id: "differentiate", label: "Differentiate", icon: "📈", desc: "Find the derivative" },
   { id: "integrate", label: "Integrate", icon: "📊", desc: "Find the antiderivative" },
   { id: "evaluate", label: "Evaluate", icon: "🔢", desc: "Calculate the numerical value" },
+];
+
+const MODES = [
+  { id: "quick", label: "Just Answer", icon: "🎯", desc: "Only the final answer", accent: "rose" },
+  { id: "answer", label: "Answer", icon: "⚡", desc: "Answer with key steps", accent: "amber" },
+  { id: "explain", label: "Explain", icon: "📝", desc: "Full step-by-step breakdown", accent: "emerald" },
 ];
 
 const MATH_CONTROLS = [
@@ -67,6 +82,8 @@ const MATH_CONTROLS = [
   { label: "tan", latex: "\\tan\\left(#0\\right)", title: "Tangent", group: "fn" },
   { label: "log", latex: "\\log\\left(#0\\right)", title: "Logarithm", group: "fn" },
   { label: "ln", latex: "\\ln\\left(#0\\right)", title: "Natural log", group: "fn" },
+  { label: "∫", latex: "\\int #0\\,dx", title: "Integral", group: "fn" },
+  { label: "d/dx", latex: "\\frac{d}{dx}\\left(#0\\right)", title: "Derivative", group: "fn" },
   // Comparisons
   { label: "≤", latex: "\\le ", title: "Less than or equal", group: "cmp" },
   { label: "≥", latex: "\\ge ", title: "Greater than or equal", group: "cmp" },
@@ -74,45 +91,15 @@ const MATH_CONTROLS = [
 ];
 
 const EXAMPLES = [
-  { display: "x² + 5x + 6 = 0", latex: "x^{2}+5x+6=0" },
-  { display: "3x + 7 = 22", latex: "3x+7=22" },
-  { display: "sin(π/4)", latex: "\\sin\\left(\\frac{\\pi}{4}\\right)" },
-  { display: "d/dx (x³ + 2x)", latex: "\\frac{d}{dx}\\left(x^{3}+2x\\right)" },
-  { display: "(2x + 3)(x − 5)", latex: "\\left(2x+3\\right)\\left(x-5\\right)" },
-  { display: "∫ 2x dx", latex: "\\int 2x\\,dx" },
-  { display: "x² − 9", latex: "x^{2}-9" },
-  { display: "lim x→0 sin(x)/x", latex: "\\lim_{x\\to 0}\\frac{\\sin\\left(x\\right)}{x}" },
+  "x^{2}+5x+6=0",
+  "3x+7=22",
+  "\\sin\\left(\\frac{\\pi}{4}\\right)",
+  "\\frac{d}{dx}\\left(x^{3}+2x\\right)",
+  "\\left(2x+3\\right)\\left(x-5\\right)",
+  "\\int 2x\\,dx",
+  "x^{2}-9",
+  "\\lim_{x\\to 0}\\frac{\\sin\\left(x\\right)}{x}",
 ];
-
-// Clean any LaTeX that slips through from AI
-function cleanMath(text: string): string {
-  if (!text) return text;
-  return text
-    .replace(/\\times/g, "×")
-    .replace(/\\cdot/g, "·")
-    .replace(/\\div/g, "÷")
-    .replace(/\\pm/g, "±")
-    .replace(/\\sqrt\{([^}]+)\}/g, "√($1)")
-    .replace(/\\sqrt/g, "√")
-    .replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, "($1)/($2)")
-    .replace(/\\pi/g, "π")
-    .replace(/\\infty/g, "∞")
-    .replace(/\\theta/g, "θ")
-    .replace(/\\leq/g, "≤")
-    .replace(/\\geq/g, "≥")
-    .replace(/\\neq/g, "≠")
-    .replace(/\\rightarrow|\\to/g, "→")
-    .replace(/\\leftarrow/g, "←")
-    .replace(/\\quad/g, "  ")
-    .replace(/\\qquad/g, "    ")
-    .replace(/\\text\{([^}]+)\}/g, "$1")
-    .replace(/\\left/g, "")
-    .replace(/\\right/g, "")
-    .replace(/\\\\/g, "\n")
-    .replace(/\\,/g, " ")
-    .replace(/\\;/g, " ")
-    .replace(/\\\s/g, " ");
-}
 
 export default function MathSolver() {
   const [expression, setExpression] = useState("");
@@ -122,12 +109,14 @@ export default function MathSolver() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState(0);
-  const [history, setHistory] = useState<{ expr: string; op: string; result: string }[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [mathFieldEl, setMathFieldEl] = useState<MF | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  const extractingRef = useRef(false);
 
   useEffect(() => {
     const s = localStorage.getItem("learnix-theme") || "dark";
@@ -135,104 +124,25 @@ export default function MathSolver() {
   }, []);
 
   useEffect(() => {
-    try {
-      setHistory(JSON.parse(localStorage.getItem("learnix-math-history") || "[]"));
-    } catch { /* */ }
+    // Deferred so the stored history hydrates without mismatching the static HTML
+    const t = setTimeout(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]");
+        if (Array.isArray(stored) && stored.length) setHistory(stored);
+      } catch { /* corrupt history — start fresh */ }
+    }, 0);
+    return () => clearTimeout(t);
   }, []);
 
   useEffect(() => {
-    if (!loading) { setElapsed(0); return; }
+    if (!loading) return;
     const i = setInterval(() => setElapsed(p => p + 1), 1000);
     return () => clearInterval(i);
   }, [loading]);
 
-  function insertMath(latex: string) {
-    if (mathFieldEl) {
-      mathFieldEl.insert(latex, { focus: true });
-    }
-  }
-
-  function handleExpressionChange(latex: string) {
-    setExpression(latex);
-    setSolution(null);
-    setOperation(null);
-    setMode(null);
-  }
-
-  function selectOperation(opId: string) {
-    if (!expression.trim()) return;
-    setOperation(opId);
-    setMode(null);
-  }
-
-  function selectMode(m: string) {
-    if (!operation) return;
-    setMode(m);
-    handleSolve(operation, m);
-  }
-
-  async function handleSolve(opId: string, solveMode: string) {
-    if (!expression.trim()) return;
-    setLoading(true);
-    setError("");
-    setSolution(null);
-
-    try {
-      const opLabel = OPERATIONS.find(o => o.id === opId)?.label || opId;
-      const res = await fetch("/api/math", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ expression: expression.trim(), operation: opLabel, mode: solveMode }),
-      });
-
-      let data;
-      try { data = await res.json(); } catch {
-        throw new Error("The AI returned an invalid response. Please try again.");
-      }
-      if (!res.ok) throw new Error(data?.error || "Failed to solve");
-
-      setSolution(data);
-      // Save to history
-      const item = { expr: expression.trim(), op: opLabel, result: data.result || "" };
-      setHistory(prev => {
-        const u = [item, ...prev].slice(0, 30);
-        localStorage.setItem("learnix-math-history", JSON.stringify(u));
-        return u;
-      });
-
-      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Something went wrong";
-      if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429")) {
-        setError("Rate limited — too many requests. Please wait a minute and try again.");
-      } else { setError(msg); }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function handleNewProblem() {
-    setExpression("");
-    setOperation(null);
-    setMode(null);
-    setSolution(null);
-    setError("");
-    setImagePreview(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    setTimeout(() => mathFieldEl?.focus(), 100);
-  }
-
-  function loadExample(latex: string) {
-    setExpression(latex);
-    setOperation(null);
-    setMode(null);
-    setSolution(null);
-    setError("");
-    setTimeout(() => mathFieldEl?.focus(), 50);
-  }
-
-  async function handleImageUpload(file: File) {
-    if (!file.type.startsWith("image/")) return;
+  const handleImageUpload = useCallback(async (file: File) => {
+    if (!file.type.startsWith("image/") || extractingRef.current) return;
+    extractingRef.current = true;
     setExtracting(true);
     setError("");
     setImagePreview(null);
@@ -260,17 +170,135 @@ export default function MathSolver() {
       setSolution(null);
       setOperation(null);
       setMode(null);
-      setTimeout(() => mathFieldEl?.focus(), 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to extract math from image");
     } finally {
+      extractingRef.current = false;
       setExtracting(false);
+      setImagePreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
+  }, []);
+
+  // Paste a screenshot anywhere on the page
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const item = Array.from(e.clipboardData?.items || []).find(i => i.type.startsWith("image/"));
+      if (item) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          handleImageUpload(file);
+        }
+      }
+    }
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [handleImageUpload]);
+
+  function insertMath(latex: string) {
+    mathFieldEl?.insert(latex, { focus: true });
+  }
+
+  function handleExpressionChange(latex: string) {
+    setExpression(latex);
+    setSolution(null);
+    setOperation(null);
+    setMode(null);
+  }
+
+  function selectOperation(opId: string) {
+    if (!expression.trim()) return;
+    setOperation(opId);
+    setMode(null);
+  }
+
+  function selectMode(m: string) {
+    if (!operation) return;
+    setMode(m);
+    handleSolve(operation, m);
+  }
+
+  async function handleSolve(opId: string, solveMode: string) {
+    if (!expression.trim()) return;
+    setElapsed(0);
+    setLoading(true);
+    setError("");
+    setSolution(null);
+
+    try {
+      const opLabel = OPERATIONS.find(o => o.id === opId)?.label || opId;
+      const res = await fetch("/api/math", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ expression: expression.trim(), operation: opLabel, mode: solveMode }),
+      });
+
+      let data;
+      try { data = await res.json(); } catch {
+        throw new Error("The AI returned an invalid response. Please try again.");
+      }
+      if (!res.ok) throw new Error(data?.error || "Failed to solve");
+
+      setSolution(data);
+      const item: HistoryItem = { expr: expression.trim(), op: opLabel, result: data.result || "" };
+      setHistory(prev => {
+        const u = [item, ...prev.filter(h => h.expr !== item.expr || h.op !== item.op)].slice(0, 30);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(u));
+        return u;
+      });
+
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Something went wrong";
+      if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429")) {
+        setError("Rate limited — too many requests. Please wait a minute and try again.");
+      } else { setError(msg); }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleNewProblem() {
+    setExpression("");
+    setOperation(null);
+    setMode(null);
+    setSolution(null);
+    setError("");
+    setImagePreview(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    setTimeout(() => mathFieldEl?.focus(), 100);
+  }
+
+  function loadExpression(latex: string) {
+    setExpression(latex);
+    setOperation(null);
+    setMode(null);
+    setSolution(null);
+    setError("");
+    setTimeout(() => mathFieldEl?.focus(), 50);
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleImageUpload(file);
   }
 
   const showOperations = expression.trim().length > 0 && !operation && !loading && !solution;
   const showModeChoice = operation && !mode && !loading && !solution;
+
+  const modeButtonClasses: Record<string, string> = {
+    rose: "hover:border-rose-500/30 hover:bg-rose-500/5",
+    amber: "hover:border-amber-500/30 hover:bg-amber-500/5",
+    emerald: "hover:border-emerald-500/30 hover:bg-emerald-500/5",
+  };
+  const modeLabelClasses: Record<string, string> = {
+    rose: "group-hover:text-rose-300",
+    amber: "group-hover:text-amber-300",
+    emerald: "group-hover:text-emerald-300",
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#0a0a1a] text-slate-800 dark:text-slate-200 transition-colors duration-300 relative flex flex-col">
@@ -294,14 +322,19 @@ export default function MathSolver() {
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mb-3">Math Solver</h2>
             <p className="text-slate-500 dark:text-slate-400 text-base sm:text-lg max-w-lg mx-auto">
-              Type any math expression, then choose what to do with it.
+              Type a math expression, upload a screenshot, or paste an image — then choose what to do with it.
             </p>
           </div>
         )}
 
         {/* Input Area */}
         {!loading && (
-          <div className={`glass-strong rounded-2xl p-5 sm:p-6 mb-6 animate-fadeInUp ${solution ? "" : ""}`}>
+          <div
+            className={`glass-strong rounded-2xl p-5 sm:p-6 mb-6 animate-fadeInUp transition-colors ${dragging ? "border-emerald-500/50 bg-emerald-500/5" : ""}`}
+            onDragOver={e => { e.preventDefault(); setDragging(true); }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={onDrop}
+          >
 
             {/* Math Controls — grouped */}
             <div className="flex flex-wrap items-center gap-1 mb-4">
@@ -336,7 +369,6 @@ export default function MathSolver() {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
                 className="hidden"
                 onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
               />
@@ -344,7 +376,7 @@ export default function MathSolver() {
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={extracting}
-                title="Upload a photo of a math problem"
+                title="Upload a photo or screenshot of a math problem"
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition disabled:opacity-50"
               >
                 {extracting ? (
@@ -355,10 +387,15 @@ export default function MathSolver() {
               </button>
             </div>
 
+            <p className="text-[11px] text-slate-600 dark:text-slate-500 mt-2">
+              📷 Tip: drag &amp; drop or paste (Ctrl+V) a screenshot of a math problem
+            </p>
+
             {/* Image preview while extracting */}
             {imagePreview && extracting && (
               <div className="mt-3 flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10 animate-pulse">
-                <img src={imagePreview} alt="Uploaded" className="w-16 h-16 object-cover rounded-lg" />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={imagePreview} alt="Uploaded math problem" className="w-16 h-16 object-cover rounded-lg" />
                 <div>
                   <p className="text-sm font-medium text-white">Reading math from image...</p>
                   <p className="text-xs text-slate-500">Extracting the expression</p>
@@ -366,15 +403,15 @@ export default function MathSolver() {
               </div>
             )}
 
-            {/* Examples */}
+            {/* Examples — rendered with KaTeX */}
             {!expression && !solution && (
               <div className="mt-3">
                 <p className="text-xs text-slate-500 mb-2">Try an example:</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {EXAMPLES.map(ex => (
-                    <button key={ex.display} onClick={() => loadExample(ex.latex)}
-                      className="px-3 py-1.5 rounded-lg text-xs font-mono bg-white/5 border border-white/8 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/20 transition">
-                      {ex.display}
+                  {EXAMPLES.map(latex => (
+                    <button key={latex} onClick={() => loadExpression(latex)}
+                      className="px-3 py-1.5 rounded-lg text-sm bg-white/5 border border-white/8 text-slate-400 hover:bg-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/20 transition">
+                      <MathInline latex={latex} />
                     </button>
                   ))}
                 </div>
@@ -431,24 +468,14 @@ export default function MathSolver() {
               </p>
             </div>
             <div className="grid grid-cols-3 gap-3">
-              <button onClick={() => selectMode("quick")}
-                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-rose-500/30 hover:bg-rose-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
-                <span className="text-3xl">🎯</span>
-                <span className="text-base font-bold text-slate-200 group-hover:text-rose-300 transition">Just Answer</span>
-                <span className="text-xs text-slate-500 leading-tight text-center">Only the final answer</span>
-              </button>
-              <button onClick={() => selectMode("answer")}
-                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-amber-500/30 hover:bg-amber-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
-                <span className="text-3xl">⚡</span>
-                <span className="text-base font-bold text-slate-200 group-hover:text-amber-300 transition">Answer</span>
-                <span className="text-xs text-slate-500 leading-tight text-center">Answer with key steps</span>
-              </button>
-              <button onClick={() => selectMode("explain")}
-                className="group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200">
-                <span className="text-3xl">📝</span>
-                <span className="text-base font-bold text-slate-200 group-hover:text-emerald-300 transition">Explain</span>
-                <span className="text-xs text-slate-500 leading-tight text-center">Full step-by-step breakdown</span>
-              </button>
+              {MODES.map(m => (
+                <button key={m.id} onClick={() => selectMode(m.id)}
+                  className={`group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ${modeButtonClasses[m.accent]}`}>
+                  <span className="text-3xl">{m.icon}</span>
+                  <span className={`text-base font-bold text-slate-200 transition ${modeLabelClasses[m.accent]}`}>{m.label}</span>
+                  <span className="text-xs text-slate-500 leading-tight text-center">{m.desc}</span>
+                </button>
+              ))}
             </div>
           </div>
         )}
@@ -485,51 +512,47 @@ export default function MathSolver() {
 
             {/* Expression + Operation header */}
             <div className="glass rounded-2xl p-5 sm:p-6 border-emerald-500/20">
-              <div className="flex items-start justify-between gap-4 mb-3">
-                <div>
-                  <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-1.5">
-                    {solution.operation || operation}
-                  </p>
-                  <p className="text-xl sm:text-2xl font-mono font-bold text-white leading-snug">
-                    {cleanMath(solution.expression_formatted || expression)}
-                  </p>
-                </div>
+              <p className="text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
+                {solution.operation || operation}
+              </p>
+              <div className="text-xl sm:text-2xl text-white">
+                <MathBlock latex={solution.expression_latex || expression} />
               </div>
             </div>
 
             {/* Steps — hidden in quick mode */}
             {solution.steps && solution.steps.length > 0 && (
-            <div className="glass rounded-2xl p-5 sm:p-6">
-              <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📝</span>
-                Step-by-Step Solution
-              </h3>
-              <div className="space-y-0">
-                {solution.steps.map((step, i) => (
-                  <div key={i} className="flex gap-4 group">
-                    {/* Step number + line */}
-                    <div className="flex-shrink-0 flex flex-col items-center">
-                      <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-bold text-sm group-hover:bg-emerald-500/25 transition">
-                        {step.step}
-                      </div>
-                      {i < solution.steps.length - 1 && (
-                        <div className="w-0.5 flex-1 bg-emerald-500/15 my-1" />
-                      )}
-                    </div>
-                    {/* Content */}
-                    <div className="flex-1 pb-6">
-                      <h4 className="text-white font-semibold text-sm mb-1.5">{cleanMath(step.title)}</h4>
-                      <p className="text-slate-400 text-sm leading-relaxed mb-2">{cleanMath(step.content)}</p>
-                      {step.math && (
-                        <div className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 font-mono text-sm text-indigo-300 overflow-x-auto">
-                          {cleanMath(step.math)}
+              <div className="glass rounded-2xl p-5 sm:p-6">
+                <h3 className="text-lg font-semibold text-white mb-5 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">📝</span>
+                  Step-by-Step Solution
+                </h3>
+                <div className="space-y-0">
+                  {solution.steps.map((step, i) => (
+                    <div key={i} className="flex gap-4 group">
+                      {/* Step number + line */}
+                      <div className="flex-shrink-0 flex flex-col items-center">
+                        <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-bold text-sm group-hover:bg-emerald-500/25 transition">
+                          {step.step || i + 1}
                         </div>
-                      )}
+                        {i < (solution.steps?.length ?? 0) - 1 && (
+                          <div className="w-0.5 flex-1 bg-emerald-500/15 my-1" />
+                        )}
+                      </div>
+                      {/* Content */}
+                      <div className="flex-1 pb-6 min-w-0">
+                        <h4 className="text-white font-semibold text-sm mb-1.5"><MathText text={step.title} /></h4>
+                        <p className="text-slate-400 text-sm leading-relaxed mb-2"><MathText text={step.content} /></p>
+                        {step.math && (
+                          <div className="bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 text-indigo-200">
+                            <MathBlock latex={step.math} />
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
             )}
 
             {/* Result */}
@@ -538,8 +561,8 @@ export default function MathSolver() {
                 <span className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-sm">✅</span>
                 Result
               </h3>
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4">
-                <p className="text-xl font-mono font-bold text-emerald-300">{cleanMath(solution.result)}</p>
+              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 text-xl text-emerald-200">
+                <MathBlock latex={solution.result} />
               </div>
             </div>
 
@@ -550,7 +573,7 @@ export default function MathSolver() {
                   <span className="w-6 h-6 rounded-lg bg-amber-500/20 flex items-center justify-center text-xs">🔎</span>
                   Verification
                 </h3>
-                <p className="text-slate-400 text-sm leading-relaxed font-mono">{cleanMath(solution.verification)}</p>
+                <p className="text-slate-400 text-sm leading-relaxed"><MathText text={solution.verification} /></p>
               </div>
             )}
 
@@ -576,11 +599,13 @@ export default function MathSolver() {
             <h3 className="text-sm font-semibold text-slate-500 mb-3">Recent</h3>
             <div className="space-y-1.5">
               {history.slice(0, 5).map((item, i) => (
-                <button key={i} onClick={() => { setExpression(item.expr); setSolution(null); setOperation(null); setMode(null); }}
+                <button key={i} onClick={() => loadExpression(item.expr)}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-slate-300 truncate">{cleanMath(item.expr)}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{item.op} → <span className="text-emerald-400/70 font-mono">{cleanMath(item.result.length > 50 ? item.result.slice(0, 50) + "…" : item.result)}</span></p>
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p className="text-sm text-slate-300 truncate"><MathInline latex={item.expr} /></p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">
+                      {item.op} → <MathInline latex={item.result} className="text-emerald-400/70" />
+                    </p>
                   </div>
                   <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>

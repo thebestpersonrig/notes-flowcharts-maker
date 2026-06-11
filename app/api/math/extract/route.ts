@@ -1,6 +1,24 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
+// Free-tier OpenRouter vision models, tried in order.
+const VISION_MODELS = [
+  "google/gemma-4-31b-it:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "nvidia/nemotron-nano-12b-v2-vl:free",
+  "nex-agi/nex-n2-pro:free",
+];
+
+const EXTRACT_PROMPT = `Look at this image of a math problem. Extract the mathematical expression or equation exactly as written.
+
+RULES:
+- Return ONLY the LaTeX representation of the math expression
+- No explanation, no words, no markdown fences, no $ delimiters — just the raw LaTeX
+- Fractions: \\frac{a}{b}, exponents: x^{2}, subscripts: x_{1}, roots: \\sqrt{x}, integrals: \\int
+- If there are multiple expressions, return ONLY the main/first one
+- If you cannot read any math clearly, return exactly: UNREADABLE
+- For simple expressions like "3x + 7 = 22", return: 3x+7=22`;
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -11,64 +29,56 @@ export async function POST(req: NextRequest) {
     const client = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey });
     const { image } = await req.json();
 
-    if (!image) {
-      return NextResponse.json({ error: "Image is required" }, { status: 400 });
+    if (!image || typeof image !== "string" || !image.startsWith("data:image/")) {
+      return NextResponse.json({ error: "A valid image is required" }, { status: 400 });
     }
-
-    const visionModels = [
-      "google/gemma-4-31b-it:free",
-      "google/gemma-4-26b-a4b-it:free",
-      "nvidia/nemotron-3-super-120b-a12b:free",
-    ];
 
     const messages = [
       {
         role: "user" as const,
         content: [
-          {
-            type: "text" as const,
-            text: `Look at this image of a math problem. Extract the mathematical expression or equation exactly as written.
-
-RULES:
-- Return ONLY the LaTeX representation of the math expression
-- No explanation, no words, no markdown fences — just the raw LaTeX
-- If there are multiple expressions, return them separated by newlines
-- If you cannot read the math clearly, return: UNREADABLE
-- Common patterns: fractions use \\frac{}{}, exponents use ^{}, subscripts use _{}, square root uses \\sqrt{}
-- For simple expressions like "3x + 7 = 22", just return: 3x + 7 = 22`,
-          },
-          {
-            type: "image_url" as const,
-            image_url: { url: image },
-          },
+          { type: "text" as const, text: EXTRACT_PROMPT },
+          { type: "image_url" as const, image_url: { url: image } },
         ],
       },
     ];
 
-    let completion = null;
+    let raw = "";
     let lastErr = "";
-    for (const model of visionModels) {
+    for (const model of VISION_MODELS) {
       try {
-        completion = await client.chat.completions.create({
+        const completion = await client.chat.completions.create({
           model,
           max_tokens: 500,
           temperature: 0,
           messages,
         });
-        if (completion.choices[0]?.message?.content) break;
+        const content = completion.choices[0]?.message?.content?.trim();
+        if (content) {
+          raw = content;
+          break;
+        }
+        lastErr = `${model} returned an empty response`;
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
-        completion = null;
       }
     }
 
-    if (!completion) {
-      throw new Error(lastErr || "All vision models failed");
+    if (!raw) {
+      const lower = lastErr.toLowerCase();
+      if (lower.includes("429") || lower.includes("rate")) {
+        return NextResponse.json(
+          { error: "Rate limited — wait a minute and try again." },
+          { status: 429 }
+        );
+      }
+      return NextResponse.json(
+        { error: lastErr || "All vision models failed. Please try again." },
+        { status: 502 }
+      );
     }
 
-    const raw = completion.choices[0]?.message?.content?.trim();
-
-    if (!raw || raw === "UNREADABLE") {
+    if (raw.toUpperCase().includes("UNREADABLE")) {
       return NextResponse.json(
         { error: "Couldn't read the math from that image. Try a clearer photo." },
         { status: 422 }
@@ -76,9 +86,19 @@ RULES:
     }
 
     const latex = raw
-      .replace(/^```(?:latex)?\s*/i, "")
+      .replace(/^```(?:latex|tex)?\s*/i, "")
       .replace(/```\s*$/i, "")
+      .replace(/^\$\$?|\$\$?$/g, "")
+      .replace(/^\\\[|\\\]$/g, "")
+      .split("\n")[0]
       .trim();
+
+    if (!latex) {
+      return NextResponse.json(
+        { error: "Couldn't read the math from that image. Try a clearer photo." },
+        { status: 422 }
+      );
+    }
 
     return NextResponse.json({ latex });
   } catch (err) {

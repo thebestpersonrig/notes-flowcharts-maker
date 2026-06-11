@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface MF extends HTMLElement {
   value: string;
@@ -62,23 +62,17 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
   const mfRef = useRef<MF | null>(null);
   const onChangeRef = useRef(onChange);
   const onReadyRef = useRef(onReady);
+  const valueRef = useRef(value);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [showPlaceholder, setShowPlaceholder] = useState(true);
-  onChangeRef.current = onChange;
-  onReadyRef.current = onReady;
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onReadyRef.current = onReady;
+    valueRef.current = value;
+  });
 
   const fallbackRef = useRef<HTMLTextAreaElement>(null);
-  const handleFallbackInsert = useCallback((text: string) => {
-    const el = fallbackRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    onChange(value.slice(0, start) + text + value.slice(end));
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(start + text.length, start + text.length);
-    });
-  }, [value, onChange]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -164,8 +158,12 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
           requestAnimationFrame(hideUI);
           setTimeout(hideUI, 200);
 
+          // Initialize with the current value — the component may remount
+          // (e.g. after solving) while the expression state is non-empty
+          if (valueRef.current) mf.value = valueRef.current;
+
           setStatus("ready");
-          setShowPlaceholder(!value);
+          setShowPlaceholder(!valueRef.current);
           if (onReadyRef.current) onReadyRef.current(mf);
         }
       } catch (err) {
@@ -175,7 +173,6 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
     })();
 
     return () => { cancelled = true; mfRef.current = null; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
