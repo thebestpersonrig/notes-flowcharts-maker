@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 
 // ─── Model fallback chain ────────────────────────────────────────────────────
 
@@ -9,11 +10,52 @@ const MODELS = [
   "google/gemma-4-31b-it:free",
 ];
 
-async function callModel(
-  client: any,
-  messages: any,
-  max_tokens: number
-) {
+// ─── Zod schema (bulletproof validation) ─────────────────────────────────────
+
+const NotesSchema = z.object({
+  title: z.string(),
+  overview: z.string(),
+  sections: z.array(
+    z.object({
+      title: z.string(),
+      tldr: z.string(),
+      difficulty: z.string(),
+      content: z.string(),
+      key_points: z.array(z.string()),
+      examples: z.array(z.string()),
+      connections: z.string(),
+      subsections: z.array(
+        z.object({
+          title: z.string(),
+          content: z.string(),
+        })
+      ),
+    })
+  ),
+});
+
+// ─── JSON safety helpers ─────────────────────────────────────────────────────
+
+function extractAndFixJSON(text: string) {
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) return null;
+
+  let jsonStr = match[0];
+
+  jsonStr = jsonStr
+    .replace(/\\(?!["\\/bfnrtu])/g, "\\\\")
+    .replace(/[\u0000-\u001F]+/g, " ");
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Model execution with fallback ───────────────────────────────────────────
+
+async function callModel(client: any, messages: any, max_tokens: number) {
   let lastError: any;
 
   for (const model of MODELS) {
@@ -27,25 +69,28 @@ async function callModel(
       const text = res.choices[0]?.message?.content;
       if (text) return text;
     } catch (err) {
-      console.log(`Model failed: ${model}`);
       lastError = err;
+      console.log(`Model failed: ${model}`);
     }
   }
 
   throw lastError;
 }
 
-// ─── Retry wrapper for 429 errors ───────────────────────────────────────────
+// ─── Retry + validation loop (CORE BRAIN) ────────────────────────────────────
 
-async function safeCall(
-  client: any,
-  messages: any,
-  max_tokens: number,
-  retries = 2
-) {
+async function safeGenerate(client: any, messages: any, max_tokens: number, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
-      return await callModel(client, messages, max_tokens);
+      const raw = await callModel(client, messages, max_tokens);
+
+      const parsed = extractAndFixJSON(raw);
+      if (!parsed) throw new Error("Invalid JSON output");
+
+      const validated = NotesSchema.safeParse(parsed);
+      if (!validated.success) throw new Error("Schema validation failed");
+
+      return validated.data;
     } catch (err: any) {
       const isRateLimit =
         err?.status === 429 ||
@@ -54,17 +99,14 @@ async function safeCall(
         err?.message?.toLowerCase?.().includes("too many");
 
       if (isRateLimit && i < retries) {
-        console.log(`Retrying after rate limit... attempt ${i + 1}`);
         await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
         continue;
       }
 
-      throw err;
+      if (i === retries) throw err;
     }
   }
 }
-
-// ─── Per-template system prompts (UNCHANGED) ────────────────────────────────
 
 const TEMPLATE_PROMPTS: Record<string, { system: string; maxTokens: number }> =
   {
@@ -202,8 +244,6 @@ WRITING STYLE:
     },
   };
 
-// ─── Route handler ───────────────────────────────────────────────────────────
-
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
@@ -236,55 +276,29 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const tmpl =
-      TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
+    const tmpl = TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
 
-    const LENGTH_SCALE: Record<
-      string,
-      { multiplier: number; instruction: string }
-    > = {
-      short: {
-        multiplier: 0.5,
-        instruction:
-          "LENGTH: SHORT — 2-3 sections max, concise explanations.",
-      },
-      medium: {
-        multiplier: 1,
-        instruction:
-          "LENGTH: MEDIUM — balanced depth, 3-5 sections.",
-      },
-      detailed: {
-        multiplier: 1.4,
-        instruction:
-          "LENGTH: DETAILED — deep explanations, 5-7+ sections.",
-      },
+    const LENGTH_SCALE: Record<string, any> = {
+      short: { multiplier: 0.5, instruction: "SHORT" },
+      medium: { multiplier: 1, instruction: "MEDIUM" },
+      detailed: { multiplier: 1.4, instruction: "DETAILED" },
     };
 
-    const lengthConfig =
-      LENGTH_SCALE[length] || LENGTH_SCALE.medium;
+    const lengthConfig = LENGTH_SCALE[length] || LENGTH_SCALE.medium;
 
     const finalMaxTokens = Math.round(
       tmpl.maxTokens * lengthConfig.multiplier
     );
 
-    let gradeInstruction = "";
-    if (grade) {
-      gradeInstruction = `Grade level: ${grade}`;
-    }
-
-    const compareInstruction = compare
-      ? "COMPARE MODE enabled."
-      : "";
+    const gradeInstruction = grade ? `Grade level: ${grade}` : "";
+    const compareInstruction = compare ? "COMPARE MODE enabled." : "";
 
     let fileContext = "";
     const isImage = file?.mime?.startsWith("image/");
 
     if (file && !isImage) {
       try {
-        fileContext = Buffer.from(
-          file.base64,
-          "base64"
-        )
+        fileContext = Buffer.from(file.base64, "base64")
           .toString("utf-8")
           .slice(0, 15000);
       } catch {}
@@ -300,30 +314,15 @@ ${gradeInstruction}
 ${compareInstruction}
 
 Return ONLY valid JSON:
-{ ... full schema ... }
+{ ... schema ... }
 
-ABSOLUTE RULE: Return ONLY valid JSON. No markdown. No explanation. If you cannot comply, output {}.
-`;
+ABSOLUTE RULE: Return ONLY valid JSON.`;
 
-    const messages = [
-      { role: "user", content: prompt },
-    ];
+    const messages = [{ role: "user", content: prompt }];
 
-    const raw = await safeCall(
-      client,
-      messages,
-      finalMaxTokens
-    );
+    const result = await safeGenerate(client, messages, finalMaxTokens);
 
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const match = raw.match(/\{[\s\S]*\}/);
-      parsed = match ? JSON.parse(match[0]) : {};
-    }
-
-    return NextResponse.json(parsed);
+    return NextResponse.json(result);
   } catch (err: any) {
     console.error("Generate route error:", err);
 
@@ -334,10 +333,7 @@ ABSOLUTE RULE: Return ONLY valid JSON. No markdown. No explanation. If you canno
       msg.toLowerCase().includes("rate")
     ) {
       return NextResponse.json(
-        {
-          error:
-            "Rate limited — too many requests. Please wait.",
-        },
+        { error: "Rate limited — too many requests. Please wait." },
         { status: 429 }
       );
     }
