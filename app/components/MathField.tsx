@@ -87,8 +87,9 @@ export default function MathField({ value, onChange, placeholder, onReady }: Mat
 
         const mf = document.createElement("math-field") as MF;
 
-        // Disable built-in UI we don't want
-        mf.setAttribute("virtual-keyboard-mode", "off");
+        // Auto-show the virtual keyboard on touch devices — math-field is not a
+        // native input, so the OS keyboard never appears on mobile without it
+        mf.setAttribute("math-virtual-keyboard-policy", "auto");
         mf.setAttribute("smart-mode", "true");
         // Do NOT set placeholder — MathLive renders it as math (no spaces)
 

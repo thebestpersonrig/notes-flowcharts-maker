@@ -34,12 +34,17 @@ interface Solution {
   steps?: Step[];
   result: string;
   verification?: string;
+  model_used?: string;
+  solve_seconds?: number;
 }
 
 interface HistoryItem {
   expr: string;
   op: string;
+  opId?: string;
+  mode?: string;
   result: string;
+  solution?: Solution;
 }
 
 const HISTORY_KEY = "learnix-math-history-v2";
@@ -114,9 +119,11 @@ export default function MathSolver() {
   const [extracting, setExtracting] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
   const extractingRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const s = localStorage.getItem("learnix-theme") || "dark";
@@ -149,10 +156,31 @@ export default function MathSolver() {
 
     try {
       const reader = new FileReader();
-      const base64 = await new Promise<string>((resolve, reject) => {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve(reader.result as string);
         reader.onerror = () => reject(new Error("Failed to read image"));
         reader.readAsDataURL(file);
+      });
+
+      // Downscale large photos client-side — faster upload, avoids body size limits
+      const base64 = await new Promise<string>((resolve) => {
+        const img = new window.Image();
+        img.onload = () => {
+          const maxDim = 1600;
+          const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
+          if (scale >= 1 && file.size <= 500_000) { resolve(dataUrl); return; }
+          const canvas = document.createElement("canvas");
+          canvas.width = Math.max(1, Math.round(img.width * scale));
+          canvas.height = Math.max(1, Math.round(img.height * scale));
+          const ctx = canvas.getContext("2d");
+          if (!ctx) { resolve(dataUrl); return; }
+          ctx.fillStyle = "#ffffff"; // transparent PNGs would otherwise turn black as JPEG
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL("image/jpeg", 0.92));
+        };
+        img.onerror = () => resolve(dataUrl);
+        img.src = dataUrl;
       });
 
       setImagePreview(base64);
@@ -226,12 +254,16 @@ export default function MathSolver() {
     setError("");
     setSolution(null);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
       const opLabel = OPERATIONS.find(o => o.id === opId)?.label || opId;
       const res = await fetch("/api/math", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ expression: expression.trim(), operation: opLabel, mode: solveMode }),
+        signal: controller.signal,
       });
 
       let data;
@@ -241,7 +273,14 @@ export default function MathSolver() {
       if (!res.ok) throw new Error(data?.error || "Failed to solve");
 
       setSolution(data);
-      const item: HistoryItem = { expr: expression.trim(), op: opLabel, result: data.result || "" };
+      const item: HistoryItem = {
+        expr: expression.trim(),
+        op: opLabel,
+        opId,
+        mode: solveMode,
+        result: data.result || "",
+        solution: data,
+      };
       setHistory(prev => {
         const u = [item, ...prev.filter(h => h.expr !== item.expr || h.op !== item.op)].slice(0, 30);
         localStorage.setItem(HISTORY_KEY, JSON.stringify(u));
@@ -250,11 +289,16 @@ export default function MathSolver() {
 
       setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        setMode(null); // back to the detail-level choice
+        return;
+      }
       const msg = err instanceof Error ? err.message : "Something went wrong";
       if (msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("limit") || msg.toLowerCase().includes("429")) {
         setError("Rate limited — too many requests. Please wait a minute and try again.");
       } else { setError(msg); }
     } finally {
+      abortRef.current = null;
       setLoading(false);
     }
   }
@@ -277,6 +321,55 @@ export default function MathSolver() {
     setSolution(null);
     setError("");
     setTimeout(() => mathFieldEl?.focus(), 50);
+  }
+
+  function loadHistoryItem(item: HistoryItem) {
+    setError("");
+    setExpression(item.expr);
+    if (item.solution) {
+      // Restore the saved solution instantly — no API call needed
+      setSolution(item.solution);
+      setOperation(item.opId || null);
+      setMode(item.mode || "answer");
+      setTimeout(() => resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+    } else {
+      setSolution(null);
+      setOperation(null);
+      setMode(null);
+      setTimeout(() => mathFieldEl?.focus(), 50);
+    }
+  }
+
+  function deleteHistoryItem(index: number) {
+    setHistory(prev => {
+      const u = prev.filter((_, i) => i !== index);
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(u));
+      return u;
+    });
+  }
+
+  function clearHistory() {
+    setHistory([]);
+    localStorage.removeItem(HISTORY_KEY);
+  }
+
+  async function copyResult() {
+    if (!solution?.result) return;
+    try {
+      await navigator.clipboard.writeText(solution.result);
+    } catch {
+      // Fallback for non-secure contexts / older browsers
+      const ta = document.createElement("textarea");
+      ta.value = solution.result;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch { /* give up silently */ }
+      document.body.removeChild(ta);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
   }
 
   function onDrop(e: React.DragEvent) {
@@ -348,6 +441,7 @@ export default function MathSolver() {
                       type="button"
                       onClick={() => insertMath(ctrl.latex)}
                       title={ctrl.title}
+                      aria-label={`Insert ${ctrl.title}`}
                       className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:bg-emerald-500/15 hover:text-emerald-300 hover:border-emerald-500/30 transition-all active:scale-95"
                     >
                       {ctrl.label}
@@ -377,6 +471,7 @@ export default function MathSolver() {
                 onClick={() => fileInputRef.current?.click()}
                 disabled={extracting}
                 title="Upload a photo or screenshot of a math problem"
+                aria-label="Upload a photo or screenshot of a math problem"
                 className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition disabled:opacity-50"
               >
                 {extracting ? (
@@ -467,7 +562,7 @@ export default function MathSolver() {
                 {OPERATIONS.find(o => o.id === operation)?.icon} {OPERATIONS.find(o => o.id === operation)?.label} — how detailed?
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {MODES.map(m => (
                 <button key={m.id} onClick={() => selectMode(m.id)}
                   className={`group flex flex-col items-center gap-2 p-5 sm:p-6 rounded-2xl glass border border-white/10 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 ${modeButtonClasses[m.accent]}`}>
@@ -485,7 +580,13 @@ export default function MathSolver() {
           <div className="glass border-rose-500/30 rounded-xl p-4 mb-6 flex items-start gap-3 animate-scaleIn bg-rose-500/10">
             <svg className="w-5 h-5 text-rose-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.034 16.5c-.77.833.192 2.5 1.732 2.5z" /></svg>
             <p className="text-rose-300 flex-1 text-sm">{error}</p>
-            <button onClick={() => setError("")} className="text-rose-400 hover:text-rose-200 p-0.5 rounded hover:bg-rose-500/20 transition">
+            {operation && mode && (
+              <button onClick={() => handleSolve(operation, mode)}
+                className="flex-shrink-0 px-3 py-1 rounded-lg text-xs font-semibold text-rose-200 bg-rose-500/20 border border-rose-500/30 hover:bg-rose-500/30 transition active:scale-95">
+                Retry
+              </button>
+            )}
+            <button onClick={() => setError("")} aria-label="Dismiss error" className="text-rose-400 hover:text-rose-200 p-0.5 rounded hover:bg-rose-500/20 transition">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
           </div>
@@ -503,6 +604,15 @@ export default function MathSolver() {
               {OPERATIONS.find(o => o.id === operation)?.label} — {mode === "explain" ? "building explanation..." : mode === "quick" ? "getting answer..." : "solving with key steps..."}
             </p>
             <p className="text-slate-500 text-xs mt-2 tabular-nums">{elapsed}s</p>
+            {elapsed >= 15 && (
+              <p className="text-amber-400/70 text-xs mt-2 animate-fadeInUp">
+                Free models can be slow at peak times — hang tight, a backup model kicks in if needed.
+              </p>
+            )}
+            <button onClick={() => abortRef.current?.abort()}
+              className="mt-4 px-4 py-1.5 rounded-lg text-xs font-medium text-slate-400 border border-white/10 hover:bg-white/5 hover:text-slate-200 transition active:scale-95">
+              Cancel
+            </button>
           </div>
         )}
 
@@ -518,6 +628,11 @@ export default function MathSolver() {
               <div className="text-xl sm:text-2xl text-white">
                 <MathBlock latex={solution.expression_latex || expression} />
               </div>
+              {solution.model_used && (
+                <p className="text-[11px] text-slate-500 mt-3">
+                  Solved by {solution.model_used}{solution.solve_seconds ? ` in ${solution.solve_seconds}s` : ""}
+                </p>
+              )}
             </div>
 
             {/* Steps — hidden in quick mode */}
@@ -557,10 +672,26 @@ export default function MathSolver() {
 
             {/* Result */}
             <div className="glass rounded-2xl p-5 sm:p-6 border-emerald-500/20 bg-emerald-500/[0.03]">
-              <h3 className="text-lg font-semibold text-emerald-400 mb-3 flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-sm">✅</span>
-                Result
-              </h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-emerald-400 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-sm">✅</span>
+                  Result
+                </h3>
+                <button onClick={copyResult}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 border border-white/10 hover:bg-emerald-500/10 hover:text-emerald-300 hover:border-emerald-500/20 transition active:scale-95">
+                  {copied ? (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>
+                      Copy LaTeX
+                    </>
+                  )}
+                </button>
+              </div>
               <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-5 py-4 text-xl text-emerald-200">
                 <MathBlock latex={solution.result} />
               </div>
@@ -596,19 +727,36 @@ export default function MathSolver() {
         {/* Recent History — only on empty state */}
         {!solution && !loading && !expression && history.length > 0 && (
           <div className="mt-8 animate-fadeInUp" style={{ animationDelay: "200ms" }}>
-            <h3 className="text-sm font-semibold text-slate-500 mb-3">Recent</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-slate-500">Recent</h3>
+              <button onClick={clearHistory}
+                className="text-xs text-slate-600 hover:text-rose-400 transition">
+                Clear all
+              </button>
+            </div>
             <div className="space-y-1.5">
-              {history.slice(0, 5).map((item, i) => (
-                <button key={i} onClick={() => loadExpression(item.expr)}
-                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left">
+              {history.slice(0, 8).map((item, i) => (
+                <div key={i} role="button" tabIndex={0}
+                  onClick={() => loadHistoryItem(item)}
+                  onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); loadHistoryItem(item); } }}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left cursor-pointer">
                   <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="text-sm text-slate-300 truncate"><MathInline latex={item.expr} /></p>
                     <p className="text-xs text-slate-500 mt-0.5 truncate">
                       {item.op} → <MathInline latex={item.result} className="text-emerald-400/70" />
                     </p>
                   </div>
+                  {item.solution && (
+                    <span className="hidden sm:inline text-[10px] font-medium text-emerald-500/60 border border-emerald-500/20 rounded-md px-1.5 py-0.5 flex-shrink-0">
+                      saved
+                    </span>
+                  )}
+                  <button onClick={e => { e.stopPropagation(); deleteHistoryItem(i); }} aria-label="Delete history item"
+                    className="p-1 rounded text-slate-600 hover:text-rose-400 hover:bg-rose-500/10 transition flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
                   <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                </button>
+                </div>
               ))}
             </div>
           </div>

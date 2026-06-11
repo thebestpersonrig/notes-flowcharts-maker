@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
       apiKey,
+      defaultHeaders: { "X-Title": "Learnix Math Solver" },
     });
 
     const { expression, operation, mode = "answer" } = await req.json();
@@ -172,7 +173,9 @@ Expression (LaTeX): ${expression.trim()}
 Be accurate. Double-check your work. Return ONLY valid JSON.`;
 
     let data: Solution | null = null;
+    let modelUsed = "";
     let lastErr = "";
+    const startedAt = Date.now();
 
     for (const model of SOLVER_MODELS) {
       try {
@@ -184,7 +187,7 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
           ],
           max_tokens: isQuick ? 1500 : isExplain ? 6000 : 3000,
           temperature: 0.1,
-        });
+        }, { timeout: 60_000 }); // a hung free model falls through to the next one
 
         const raw = completion.choices[0]?.message?.content?.trim();
         if (!raw) {
@@ -203,6 +206,7 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
         }
 
         data = parsed;
+        modelUsed = model;
         break;
       } catch (e) {
         lastErr = e instanceof Error ? e.message : String(e);
@@ -228,7 +232,9 @@ Be accurate. Double-check your work. Return ONLY valid JSON.`;
       data.verification = "";
     }
 
-    return NextResponse.json(data);
+    const modelName = modelUsed.replace(/^[^/]+\//, "").replace(/:free$/, "");
+    const solveSeconds = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+    return NextResponse.json({ ...data, model_used: modelName, solve_seconds: solveSeconds });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     const lower = msg.toLowerCase();

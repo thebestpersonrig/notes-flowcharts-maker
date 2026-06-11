@@ -26,7 +26,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "OPENROUTER_API_KEY is not set" }, { status: 500 });
     }
 
-    const client = new OpenAI({ baseURL: "https://openrouter.ai/api/v1", apiKey });
+    const client = new OpenAI({
+      baseURL: "https://openrouter.ai/api/v1",
+      apiKey,
+      defaultHeaders: { "X-Title": "Learnix Math Solver" },
+    });
     const { image } = await req.json();
 
     if (!image || typeof image !== "string" || !image.startsWith("data:image/")) {
@@ -52,7 +56,7 @@ export async function POST(req: NextRequest) {
           max_tokens: 500,
           temperature: 0,
           messages,
-        });
+        }, { timeout: 40_000 }); // a hung vision model falls through to the next one
         const content = completion.choices[0]?.message?.content?.trim();
         if (content) {
           raw = content;
