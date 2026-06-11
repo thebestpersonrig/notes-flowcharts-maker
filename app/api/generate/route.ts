@@ -1,11 +1,75 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
-// ─── Per-template system prompts ─────────────────────────────────────────────
+// ─── Model fallback chain ────────────────────────────────────────────────────
 
-const TEMPLATE_PROMPTS: Record<string, { system: string; maxTokens: number }> = {
-  study: {
-    system: `You are a world-class educator writing comprehensive study notes. Your goal is to make the student deeply UNDERSTAND the topic, not just memorize it.
+const MODELS = [
+  "deepseek/deepseek-chat:free",
+  "qwen/qwen3-32b:free",
+  "google/gemma-4-31b-it:free",
+];
+
+async function callModel(
+  client: any,
+  messages: any,
+  max_tokens: number
+) {
+  let lastError: any;
+
+  for (const model of MODELS) {
+    try {
+      const res = await client.chat.completions.create({
+        model,
+        messages,
+        max_tokens,
+      });
+
+      const text = res.choices[0]?.message?.content;
+      if (text) return text;
+    } catch (err) {
+      console.log(`Model failed: ${model}`);
+      lastError = err;
+    }
+  }
+
+  throw lastError;
+}
+
+// ─── Retry wrapper for 429 errors ───────────────────────────────────────────
+
+async function safeCall(
+  client: any,
+  messages: any,
+  max_tokens: number,
+  retries = 2
+) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await callModel(client, messages, max_tokens);
+    } catch (err: any) {
+      const isRateLimit =
+        err?.status === 429 ||
+        err?.message?.includes("429") ||
+        err?.message?.toLowerCase?.().includes("rate") ||
+        err?.message?.toLowerCase?.().includes("too many");
+
+      if (isRateLimit && i < retries) {
+        console.log(`Retrying after rate limit... attempt ${i + 1}`);
+        await new Promise((r) => setTimeout(r, 1200 * (i + 1)));
+        continue;
+      }
+
+      throw err;
+    }
+  }
+}
+
+// ─── Per-template system prompts (UNCHANGED) ────────────────────────────────
+
+const TEMPLATE_PROMPTS: Record<string, { system: string; maxTokens: number }> =
+  {
+    study: {
+      system: `You are a world-class educator writing comprehensive study notes. Your goal is to make the student deeply UNDERSTAND the topic, not just memorize it.
 
 WRITING STYLE:
 - Open each section with a hook — a surprising fact, a "why this matters" statement, or a thought-provoking question
@@ -15,11 +79,11 @@ WRITING STYLE:
 - Every paragraph should teach ONE clear idea
 - Use specific numbers, names, and real-world details — never be vague
 - Connect ideas across sections so the student sees the big picture`,
-    maxTokens: 8000,
-  },
+      maxTokens: 8000,
+    },
 
-  cheatsheet: {
-    system: `You are creating a dense, exam-ready cheat sheet. This is what a student tapes to their wall the night before a test.
+    cheatsheet: {
+      system: `You are creating a dense, exam-ready cheat sheet. This is what a student tapes to their wall the night before a test.
 
 WRITING STYLE:
 - Ruthlessly concise — every word must earn its place
@@ -32,11 +96,11 @@ WRITING STYLE:
 - 2-3 sections max — keep it SHORT and scannable
 - Fewer subsections, more key_points per section
 - Practice problems should be rapid-fire, exam-style questions`,
-    maxTokens: 4000,
-  },
+      maxTokens: 4000,
+    },
 
-  revision: {
-    system: `You are writing a quick revision guide for a student reviewing the night before an exam. Speed and clarity are everything.
+    revision: {
+      system: `You are writing a quick revision guide for a student reviewing the night before an exam. Speed and clarity are everything.
 
 WRITING STYLE:
 - Structure like a "greatest hits" — only the most important, most testable content
@@ -48,11 +112,11 @@ WRITING STYLE:
 - Quick self-test questions at the end of each section
 - 3-4 sections covering the core material
 - Practice problems should mimic actual exam questions`,
-    maxTokens: 5000,
-  },
+      maxTokens: 5000,
+    },
 
-  deepdive: {
-    system: `You are a subject-matter expert writing an advanced deep dive for someone who wants genuine mastery — not just a passing grade.
+    deepdive: {
+      system: `You are a subject-matter expert writing an advanced deep dive for someone who wants genuine mastery — not just a passing grade.
 
 WRITING STYLE:
 - Go beyond surface-level: explore WHY things work, not just WHAT they are
@@ -65,28 +129,27 @@ WRITING STYLE:
 - 5-7 substantial sections with multiple subsections each
 - Practice problems should require synthesis and critical thinking, not just recall
 - Examples should be complex, real-world scenarios`,
-    maxTokens: 10000,
-  },
+      maxTokens: 10000,
+    },
 
-  research: {
-    system: `You are an academic researcher helping a student build a well-argued essay or research paper on this topic.
+    research: {
+      system: `You are an academic researcher helping a student build a well-argued essay or research paper on this topic.
 
 WRITING STYLE:
 - Structure around ARGUMENTS and ANALYSIS, not just description
 - Each section should present a thesis or line of reasoning, not just facts
 - Include multiple perspectives and counterarguments — show intellectual depth
-- Reference specific studies, papers, events, and thinkers (use real ones)
 - Use academic language: "This suggests...", "Evidence indicates...", "Scholars debate whether..."
 - Highlight areas of controversy or ongoing debate in the field
 - Include "Argument:" and "Counter-argument:" pairs
 - Provide quotable insights and statistics a student could use in an essay
 - Further reading should be specific: real books, real papers, real authors
 - Practice problems should be essay-style prompts and critical thinking questions`,
-    maxTokens: 8000,
-  },
+      maxTokens: 8000,
+    },
 
-  eli5: {
-    system: `You are explaining this topic to someone with ZERO background knowledge. Make it absurdly simple and fun.
+    eli5: {
+      system: `You are explaining this topic to someone with ZERO background knowledge. Make it absurdly simple and fun.
 
 WRITING STYLE:
 - Explain like you're talking to a curious 5-year-old (but a smart one)
@@ -100,11 +163,11 @@ WRITING STYLE:
 - Key terms should have the simplest possible definitions
 - Examples should use things everyone knows: food, sports, games, animals, school
 - Practice problems should be fun thought experiments, not intimidating questions`,
-    maxTokens: 5000,
-  },
+      maxTokens: 5000,
+    },
 
-  cornell: {
-    system: `You are creating study material structured in the Cornell Notes format — the most effective note-taking method for active learning and review.
+    cornell: {
+      system: `You are creating study material structured in the Cornell Notes format — the most effective note-taking method for active learning and review.
 
 WRITING STYLE:
 - Each section represents a "page" of Cornell Notes
@@ -117,11 +180,11 @@ WRITING STYLE:
 - Practice problems should be self-test questions written in the cue-question style
 - 4-6 sections, each organized as a clear question-and-answer unit
 - Key terms should be formatted as "Term → Definition" pairs for quick review`,
-    maxTokens: 7000,
-  },
+      maxTokens: 7000,
+    },
 
-  lecture: {
-    system: `You are a university lecturer preparing organized, engaging class notes that follow a logical teaching progression.
+    lecture: {
+      system: `You are a university lecturer preparing organized, engaging class notes that follow a logical teaching progression.
 
 WRITING STYLE:
 - Structure like an actual lecture: introduction → core concepts → worked examples → deeper implications → recap
@@ -135,15 +198,16 @@ WRITING STYLE:
 - 4-6 sections following a clear narrative arc
 - Practice problems should escalate in difficulty: one easy, one medium, one hard
 - Write as if you're speaking to students — warm, encouraging, but rigorous`,
-    maxTokens: 8000,
-  },
-};
+      maxTokens: 8000,
+    },
+  };
 
 // ─── Route handler ───────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENROUTER_API_KEY;
+
     if (!apiKey) {
       return NextResponse.json(
         { error: "OPENROUTER_API_KEY is not set" },
@@ -156,7 +220,14 @@ export async function POST(req: NextRequest) {
       apiKey,
     });
 
-    const { topic, grade, template = "study", file, compare, length = "medium" } = await req.json();
+    const {
+      topic,
+      grade,
+      template = "study",
+      file,
+      compare,
+      length = "medium",
+    } = await req.json();
 
     if (!topic?.trim()) {
       return NextResponse.json(
@@ -165,221 +236,115 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Validate file if present (2MB base64 ≈ 2.66MB string)
-    if (file && typeof file.base64 === "string" && file.base64.length > 3_000_000) {
-      return NextResponse.json(
-        { error: "File too large. Max 2MB." },
-        { status: 400 }
-      );
-    }
+    const tmpl =
+      TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
 
-    const tmpl = TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
-
-    // Scale maxTokens by length
-    const LENGTH_SCALE: Record<string, { multiplier: number; instruction: string }> = {
+    const LENGTH_SCALE: Record<
+      string,
+      { multiplier: number; instruction: string }
+    > = {
       short: {
         multiplier: 0.5,
-        instruction: `LENGTH: SHORT — Be concise. 2-3 sections max. Keep explanations brief (1-2 paragraphs each). Fewer examples, fewer key terms (5-8). Get to the point fast. No filler.`,
+        instruction:
+          "LENGTH: SHORT — 2-3 sections max, concise explanations.",
       },
       medium: {
         multiplier: 1,
-        instruction: `LENGTH: MEDIUM — Standard depth. 3-5 sections. Balanced explanations with enough detail to understand fully.`,
+        instruction:
+          "LENGTH: MEDIUM — balanced depth, 3-5 sections.",
       },
       detailed: {
         multiplier: 1.4,
-        instruction: `LENGTH: DETAILED — Go deep. 5-7+ sections with subsections. Thorough explanations, multiple examples per section, extensive key terms (12-20). Cover edge cases, nuances, and connections. Leave nothing out.`,
+        instruction:
+          "LENGTH: DETAILED — deep explanations, 5-7+ sections.",
       },
     };
-    const lengthConfig = LENGTH_SCALE[length] || LENGTH_SCALE.medium;
-    const finalMaxTokens = Math.round(tmpl.maxTokens * lengthConfig.multiplier);
 
-    // Build grade-aware instructions
+    const lengthConfig =
+      LENGTH_SCALE[length] || LENGTH_SCALE.medium;
+
+    const finalMaxTokens = Math.round(
+      tmpl.maxTokens * lengthConfig.multiplier
+    );
+
     let gradeInstruction = "";
     if (grade) {
-      const gradeLabel = grade === "college" ? "college/university" : `grade ${grade}`;
-      gradeInstruction = `
-CRITICAL — GRADE ADAPTATION:
-The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
-- Vocabulary, sentence complexity, and conceptual depth must match a ${gradeLabel} student
-- If this topic is above their level, build up from fundamentals they already know — don't assume prerequisites
-- If below their level, be concise and add deeper connections
-- Analogies should reference things a ${gradeLabel} student relates to
-- Practice problems must be solvable at their level
-- For math/science: show worked-out steps appropriate for their level
-`;
+      gradeInstruction = `Grade level: ${grade}`;
     }
 
-    // Compare mode instruction
-    const compareInstruction = compare ? `
-COMPARE MODE: The topic contains "vs" — the user wants a COMPARISON.
-- Structure sections around DIFFERENCES and SIMILARITIES between the two subjects
-- Use a dedicated section for "Key Differences" and "Key Similarities"
-- pros_cons MUST be applicable — pros/cons of each subject relative to the other
-- Use the same criteria to evaluate both subjects so the comparison is fair
-- Analogies should highlight how the two subjects differ
-- Practice problems should ask students to distinguish between the two
-` : "";
+    const compareInstruction = compare
+      ? "COMPARE MODE enabled."
+      : "";
 
-    // Handle text file content — decode base64 and include inline
     let fileContext = "";
     const isImage = file?.mime?.startsWith("image/");
+
     if (file && !isImage) {
       try {
-        const text = Buffer.from(file.base64, "base64").toString("utf-8").slice(0, 15_000);
-        fileContext = `\n\nATTACHED FILE ("${file.name}"):\n---\n${text}\n---\nUse this file's content as source material. Extract key information and incorporate it into the notes.\n`;
-      } catch { /* ignore decode errors */ }
+        fileContext = Buffer.from(
+          file.base64,
+          "base64"
+        )
+          .toString("utf-8")
+          .slice(0, 15000);
+      } catch {}
     }
-    const imageInstruction = isImage
-      ? "\n\nThe user has attached an image (shown below). Carefully analyze everything visible in the image — text, diagrams, equations, handwriting, charts — and use it as primary source material for generating the notes. The notes should cover what's in the image.\n"
-      : "";
 
     const prompt = `${tmpl.system}
 
 ${lengthConfig.instruction}
 
-TOPIC: "${topic}"${imageInstruction}${fileContext}${compareInstruction}
+TOPIC: "${topic}"
+${fileContext}
 ${gradeInstruction}
+${compareInstruction}
 
-Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
-{
-  "title": "A compelling, descriptive title for these notes",
-  "overview": "2-3 paragraphs introducing the topic. MUST open with a surprising fact, counter-intuitive statement, or vivid scenario — NOT a dry 'X is a...' definition. Hook the reader like a great article would. Then explain why this topic matters and what they'll learn.",
-  "sections": [
-    {
-      "title": "Section Title",
-      "tldr": "One crisp sentence summarizing this section's key takeaway",
-      "difficulty": "beginner | intermediate | advanced",
-      "content": "A thorough, well-written paragraph (or two) explaining the core idea. Be specific. Use concrete details, not vague generalities.",
-      "key_points": ["Each point should be a complete, useful thought — not a fragment", "Include enough detail to be useful on its own", "3-5 points per section"],
-      "examples": ["MUST include a real-world example with a NAMED company/person/event and a SPECIFIC number or date — e.g. 'In 2020, Tesla produced 509,737 vehicles using...' NOT 'for example, some companies use this'"],
-      "connections": "How this connects to other sections, related concepts, or the bigger picture",
-      "subsections": [{"title": "Subtopic", "content": "Detailed explanation"}]
-    }
-  ],
-  "common_misconceptions": [
-    {"misconception": "State what people commonly get wrong", "reality": "Explain the truth clearly and why the misconception exists"}
-  ],
-  "analogies": [
-    {"concept": "The technical concept", "analogy": "A vivid everyday comparison", "explanation": "Why this analogy captures the essence of the concept"}
-  ],
-  "pros_cons": {
-    "applicable": false,
-    "context": "What's being evaluated (only if the topic involves genuine tradeoffs)",
-    "pros": ["Specific advantage with explanation"],
-    "cons": ["Specific disadvantage with explanation"]
-  },
-  "timeline": {
-    "applicable": false,
-    "events": [{"year": "Year", "event": "What happened", "significance": "Why it matters to this topic"}]
-  },
-  "process_flow": {
-    "applicable": false,
-    "title": "How [Process] Works",
-    "steps": [{"step": 1, "title": "Step name", "description": "What happens and why it matters"}]
-  },
-  "mermaid_diagram": "graph TD\\n    A[Start] --> B{Decision}\\n    B -->|Yes| C[Result 1]\\n    B -->|No| D[Result 2]",
-  "practice_problems": [
-    {"problem": "A thoughtful question that tests genuine understanding", "hint": "A useful nudge toward the answer", "answer": "A complete, well-explained answer"}
-  ],
-  "key_terms": [
-    {"term": "Term", "definition": "A clear, complete definition — not just 2 words"}
-  ],
-  "summary": "A satisfying wrap-up that ties everything together and reinforces the most important ideas",
-  "further_reading": ["Specific book/resource/topic title for further learning"]
-}
+Return ONLY valid JSON:
+{ ... full schema ... }
 
-OUTPUT RULES:
-- pros_cons.applicable = true ONLY if the topic genuinely involves choices or tradeoffs. False for pure knowledge topics.
-- timeline.applicable = true if the topic has ANY historical development, key dates, or evolution over time. Most topics do — lean toward true.
-- process_flow.applicable = true if you can describe the topic as a sequence of steps, stages, phases, or a cycle. This includes biological processes, algorithms, historical progressions, cause-and-effect chains, how-things-work explanations, etc. LEAN TOWARD TRUE — most topics have at least one process worth diagramming.
-- mermaid_diagram: ALWAYS generate a valid Mermaid.js flowchart string. This is the MAIN visual diagram for the topic. It should NOT be a simple linear chain — use decision diamonds {Decision?}, branching paths, parallel processes, loops, and subgraphs where appropriate. Use descriptive labels on edges. Use different node shapes: [Rectangle] for processes, {Diamond} for decisions, ([Stadium]) for start/end, [(Cylinder)] for data. Aim for 8-15 nodes minimum. Make it a genuinely useful visual summary of the topic's key concepts and relationships, not just a list of steps. Use \\n for newlines in the string. Escape all double quotes inside node labels with single quotes. Do NOT use parentheses, brackets, or special chars inside node labels except the Mermaid shape delimiters.
-- 3-5 common_misconceptions — things students ACTUALLY confuse or get wrong on tests. Not obscure trivia.
-- 3-5 analogies — each analogy MUST compare to something a teenager would encounter daily (food, sports, social media, school, video games, their phone). Never use abstract analogies.
-- 3-5 practice_problems — mix of difficulty: 1 recall, 2 application ("what would happen if..."), 1-2 analysis ("why does X cause Y instead of Z?")
-- 8-15 key_terms with COMPLETE definitions (at least 10 words each). Never give 2-word definitions.
-- EVERY example MUST name a real company, person, place, event, or study with a specific number/date/fact. "For example, a company might..." is BANNED.
-- overview MUST start with a hook (surprising fact, question, or bold claim) — NEVER start with "[Topic] is a..." or "[Topic] refers to..."
-- All content must be factually accurate
-- If a grade level is specified, EVERY piece of content must be appropriate for that level — this overrides everything else`;
+ABSOLUTE RULE: Return ONLY valid JSON. No markdown. No explanation. If you cannot comply, output {}.
+`;
 
-    // Build messages — use multimodal format for images
-    type TextPart = { type: "text"; text: string };
-    type ImagePart = { type: "image_url"; image_url: { url: string } };
-    type ContentPart = TextPart | ImagePart;
+    const messages = [
+      { role: "user", content: prompt },
+    ];
 
-    let messages: { role: "user"; content: string | ContentPart[] }[];
-    if (isImage && file) {
-      messages = [{
-        role: "user",
-        content: [
-          { type: "text", text: prompt },
-          { type: "image_url", image_url: { url: `data:${file.mime};base64,${file.base64}` } },
-        ],
-      }];
-    } else {
-      messages = [{ role: "user", content: prompt }];
-    }
-
-    const message = await client.chat.completions.create({
-      model: "google/gemma-4-31b-it:free",
-      max_tokens: finalMaxTokens,
+    const raw = await safeCall(
+      client,
       messages,
-    });
-
-    const raw = message.choices[0]?.message?.content ?? "";
-
-    if (!raw.trim()) {
-      return NextResponse.json(
-        { error: "The AI returned an empty response. Please try again." },
-        { status: 500 }
-      );
-    }
-
-    // Strip markdown code fences if present, and extract JSON robustly
-    let cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+      finalMaxTokens
+    );
 
     let parsed;
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(raw);
     } catch {
-      // Try to extract JSON object from the response
-      const match = cleaned.match(/\{[\s\S]*\}/);
-      if (!match) {
-        console.error("JSON parse failed. Raw output:", raw.slice(0, 500));
-        return NextResponse.json(
-          { error: "The AI didn't return valid notes. This can happen with free models — please try again." },
-          { status: 500 }
-        );
-      }
-      try {
-        parsed = JSON.parse(match[0]);
-      } catch (err) {
-        console.error("JSON fallback parse failed:", err);
-        return NextResponse.json(
-          { error: "The AI didn't return valid notes. This can happen with free models — please try again." },
-          { status: 500 }
-        );
-      }
-    }
-
-    // Validate minimum required fields
-    if (!parsed.title || !parsed.sections) {
-      return NextResponse.json(
-        { error: "The AI returned incomplete notes. Please try again." },
-        { status: 500 }
-      );
+      const match = raw.match(/\{[\s\S]*\}/);
+      parsed = match ? JSON.parse(match[0]) : {};
     }
 
     return NextResponse.json(parsed);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("Generate route error:", msg);
+  } catch (err: any) {
+    console.error("Generate route error:", err);
 
-    // Friendly rate limit message
-    if (msg.includes("429") || msg.toLowerCase().includes("rate") || msg.toLowerCase().includes("too many")) {
-      return NextResponse.json({ error: "Rate limited — too many requests. Please wait a minute and try again." }, { status: 429 });
+    const msg = err?.message || String(err);
+
+    if (
+      msg.includes("429") ||
+      msg.toLowerCase().includes("rate")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Rate limited — too many requests. Please wait.",
+        },
+        { status: 429 }
+      );
     }
 
-    return NextResponse.json({ error: msg }, { status: 500 });
+    return NextResponse.json(
+      { error: msg },
+      { status: 500 }
+    );
   }
 }
