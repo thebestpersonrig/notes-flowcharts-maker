@@ -15,17 +15,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Image is required" }, { status: 400 });
     }
 
-    const completion = await client.chat.completions.create({
-      model: "google/gemma-4-31b-it:free",
-      max_tokens: 500,
-      temperature: 0,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Look at this image of a math problem. Extract the mathematical expression or equation exactly as written.
+    const visionModels = [
+      "meta-llama/llama-4-maverick:free",
+      "google/gemma-4-31b-it:free",
+      "meta-llama/llama-4-scout:free",
+    ];
+
+    const messages = [
+      {
+        role: "user" as const,
+        content: [
+          {
+            type: "text" as const,
+            text: `Look at this image of a math problem. Extract the mathematical expression or equation exactly as written.
 
 RULES:
 - Return ONLY the LaTeX representation of the math expression
@@ -34,15 +36,35 @@ RULES:
 - If you cannot read the math clearly, return: UNREADABLE
 - Common patterns: fractions use \\frac{}{}, exponents use ^{}, subscripts use _{}, square root uses \\sqrt{}
 - For simple expressions like "3x + 7 = 22", just return: 3x + 7 = 22`,
-            },
-            {
-              type: "image_url",
-              image_url: { url: image },
-            },
-          ],
-        },
-      ],
-    });
+          },
+          {
+            type: "image_url" as const,
+            image_url: { url: image },
+          },
+        ],
+      },
+    ];
+
+    let completion = null;
+    let lastErr = "";
+    for (const model of visionModels) {
+      try {
+        completion = await client.chat.completions.create({
+          model,
+          max_tokens: 500,
+          temperature: 0,
+          messages,
+        });
+        if (completion.choices[0]?.message?.content) break;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        completion = null;
+      }
+    }
+
+    if (!completion) {
+      throw new Error(lastErr || "All vision models failed");
+    }
 
     const raw = completion.choices[0]?.message?.content?.trim();
 

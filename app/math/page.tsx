@@ -579,8 +579,8 @@ export default function MathSolver() {
                 <button key={i} onClick={() => { setExpression(item.expr); setSolution(null); setOperation(null); setMode(null); }}
                   className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl glass hover:bg-white/5 transition group text-left">
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-mono text-slate-300 truncate">{item.expr}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">{item.op} → <span className="text-emerald-400/70 font-mono">{item.result.length > 50 ? item.result.slice(0, 50) + "…" : item.result}</span></p>
+                    <p className="text-sm font-mono text-slate-300 truncate">{cleanMath(item.expr)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{item.op} → <span className="text-emerald-400/70 font-mono">{cleanMath(item.result.length > 50 ? item.result.slice(0, 50) + "…" : item.result)}</span></p>
                   </div>
                   <svg className="w-4 h-4 text-slate-600 group-hover:text-slate-400 transition flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                 </button>
