@@ -105,10 +105,10 @@ export default function MindMap({ notes }: { notes: NotesData; isDark: boolean }
           <div className="p-4 flex flex-wrap gap-2">
             {notes.key_terms.map((kt, i) => (
               <div key={i} className="group relative">
-                <span className="inline-block px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-semibold text-slate-300 cursor-default hover:bg-indigo-500/15 hover:border-indigo-500/30 hover:text-indigo-300 transition">
+                <button type="button" className="inline-block px-3 py-1.5 bg-white/5 border border-white/10 rounded-full text-xs font-semibold text-slate-300 cursor-default hover:bg-indigo-500/15 hover:border-indigo-500/30 hover:text-indigo-300 focus:bg-indigo-500/15 focus:border-indigo-500/30 focus:text-indigo-300 transition">
                   {kt.term}
-                </span>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 glass-strong text-white text-xs rounded-xl px-3 py-2.5 shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                </button>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 sm:w-56 glass-strong text-white text-xs rounded-xl px-3 py-2.5 shadow-xl opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 pointer-events-none transition-opacity z-10">
                   <span className="font-bold text-indigo-400">{kt.term}:</span> <span className="text-slate-300">{kt.definition}</span>
                   <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 w-2 h-2 bg-[rgba(255,255,255,0.06)] rotate-45 border-b border-r border-white/10" />
                 </div>

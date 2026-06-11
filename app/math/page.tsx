@@ -430,7 +430,7 @@ export default function MathSolver() {
           >
 
             {/* Math Controls — grouped */}
-            <div className="flex flex-wrap items-center gap-1 mb-4">
+            <div className="flex flex-wrap items-center gap-0.5 sm:gap-1 mb-3 sm:mb-4">
               {MATH_CONTROLS.map((ctrl, i) => {
                 const prev = i > 0 ? MATH_CONTROLS[i - 1] : null;
                 const showSep = prev && prev.group !== ctrl.group;
@@ -442,7 +442,7 @@ export default function MathSolver() {
                       onClick={() => insertMath(ctrl.latex)}
                       title={ctrl.title}
                       aria-label={`Insert ${ctrl.title}`}
-                      className="px-2.5 py-1.5 rounded-lg text-xs font-mono font-bold bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:bg-emerald-500/15 hover:text-emerald-300 hover:border-emerald-500/30 transition-all active:scale-95"
+                      className="px-1.5 py-1 sm:px-2.5 sm:py-1.5 rounded-md sm:rounded-lg text-[10px] sm:text-xs font-mono font-bold bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:bg-emerald-500/15 hover:text-emerald-300 hover:border-emerald-500/30 transition-all active:scale-95"
                     >
                       {ctrl.label}
                     </button>
@@ -535,16 +535,16 @@ export default function MathSolver() {
         {showOperations && (
           <div className="mb-6 animate-fadeInUp" style={{ animationDelay: "100ms" }}>
             <p className="text-sm font-semibold text-slate-400 mb-3">What do you want to do with this expression?</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 sm:gap-2.5">
               {OPERATIONS.map(op => (
                 <button
                   key={op.id}
                   onClick={() => selectOperation(op.id)}
-                  className="group flex flex-col items-center gap-1.5 p-4 rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
+                  className="group flex flex-col items-center gap-1 sm:gap-1.5 p-3 sm:p-4 rounded-xl sm:rounded-2xl glass border border-white/10 hover:border-emerald-500/30 hover:bg-emerald-500/5 hover:scale-[1.02] active:scale-[0.98] transition-all duration-200"
                 >
-                  <span className="text-2xl">{op.icon}</span>
-                  <span className="text-sm font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
-                  <span className="text-[11px] text-slate-500 leading-tight text-center">{op.desc}</span>
+                  <span className="text-xl sm:text-2xl">{op.icon}</span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-200 group-hover:text-emerald-300 transition">{op.label}</span>
+                  <span className="text-[10px] sm:text-[11px] text-slate-500 leading-tight text-center hidden sm:block">{op.desc}</span>
                 </button>
               ))}
             </div>
@@ -711,12 +711,12 @@ export default function MathSolver() {
             {/* Bottom actions */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4 pb-8">
               <button onClick={handleNewProblem}
-                className="btn-gradient px-8 py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 inline-flex items-center gap-2 active:scale-95">
+                className="btn-gradient w-full sm:w-auto px-8 py-3.5 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 inline-flex items-center justify-center gap-2 active:scale-95">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                Solve Another Problem
+                Solve Another
               </button>
               <button onClick={() => { setSolution(null); setOperation(null); setMode(null); }}
-                className="glass px-6 py-3.5 text-slate-300 font-medium rounded-xl inline-flex items-center gap-2 hover:bg-white/10 transition active:scale-95">
+                className="glass w-full sm:w-auto px-6 py-3.5 text-slate-300 font-medium rounded-xl inline-flex items-center justify-center gap-2 hover:bg-white/10 transition active:scale-95">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Different Operation
               </button>

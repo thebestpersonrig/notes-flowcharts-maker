@@ -264,7 +264,7 @@ export default function Home() {
       {/* ─── History Sidebar ─────────────────────────────────── */}
       {showHistory && (<>
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 animate-fadeIn" onClick={() => setShowHistory(false)} />
-        <div className="fixed inset-y-0 left-0 w-80 glass-strong z-50 flex flex-col shadow-2xl animate-slideInLeft rounded-r-2xl">
+        <div className="fixed inset-y-0 left-0 w-full sm:w-80 glass-strong z-50 flex flex-col shadow-2xl animate-slideInLeft sm:rounded-r-2xl">
           <div className="flex items-center justify-between p-5 border-b border-white/10">
             <h3 className="font-semibold text-slate-900 dark:text-white">History</h3>
             <button onClick={() => setShowHistory(false)} className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition">
@@ -478,8 +478,8 @@ export default function Home() {
                   <div className="flex flex-wrap gap-2 no-print items-center">
                     {/* Prominent Ask AI button */}
                     <button onClick={() => setChatOpen(!chatOpen)}
-                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold border-2 transition-all active:scale-95 shadow-lg ${chatOpen ? "bg-violet-500 text-white border-violet-400 shadow-violet-500/30" : "bg-gradient-to-r from-violet-500 to-indigo-500 text-white border-violet-500/50 shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02]"}`}>
-                      <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                      className={`flex items-center gap-1.5 sm:gap-2 px-4 py-2 sm:px-5 sm:py-2.5 rounded-xl text-xs sm:text-sm font-bold border-2 transition-all active:scale-95 shadow-lg ${chatOpen ? "bg-violet-500 text-white border-violet-400 shadow-violet-500/30" : "bg-gradient-to-r from-violet-500 to-indigo-500 text-white border-violet-500/50 shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02]"}`}>
+                      <svg className="w-4 h-4 sm:w-4.5 sm:h-4.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
                       Ask AI
                     </button>
                     {/* Other buttons */}
@@ -488,8 +488,8 @@ export default function Home() {
                       { onClick: handleDownloadWord, label: downloading ? "..." : "Word", cls: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/30", icon: "M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", disabled: downloading },
                       { onClick: handleShare, label: copied ? "Copied!" : "Share", cls: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30", icon: "M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" },
                     ].map(({ onClick, label, cls, icon, disabled }) => (
-                      <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`}>
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
+                      <button key={label} onClick={onClick} disabled={disabled} className={`flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs font-semibold border transition-all active:scale-95 ${cls}`} title={label}>
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg><span className="hidden sm:inline">{label}</span>
                       </button>
                     ))}
                   </div>
@@ -512,7 +512,7 @@ export default function Home() {
                     {collapsedSections.size > 0 ? "Expand all" : "Collapse all"}
                   </button>
                 </div>
-                <nav className="space-y-1">
+                <nav className="space-y-1 max-h-[45vh] sm:max-h-none overflow-y-auto">
                   <button onClick={() => scrollToSection("overview")} className="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-white/5 hover:text-white transition flex items-center gap-2">
                     <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 flex-shrink-0" />Overview
                   </button>
@@ -553,8 +553,8 @@ export default function Home() {
                 { key: "flowchart" as const, label: "Flowchart", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z", show: hasFlowchart },
                 { key: "quiz" as const, label: "Quiz", icon: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z", show: true },
               ]).filter(t => t.show).map(({ key, label, icon }) => (
-                <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === key ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-white/5 hover:text-slate-300"}`}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg>{label}
+                <button key={key} onClick={() => setActiveTab(key)} className={`flex-1 flex items-center justify-center gap-1.5 sm:gap-2 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all ${activeTab === key ? "bg-indigo-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-500 hover:bg-white/5 hover:text-slate-300"}`}>
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} /></svg><span className="hidden sm:inline">{label}</span>
                 </button>
               ))}
             </div>
@@ -692,11 +692,11 @@ export default function Home() {
                 {hasFlowchart && (
                   <GlassCard>
                     <button onClick={() => toggleSection("processflow")} className="w-full flex items-center justify-between mb-1 group">
-                      <h3 className="text-lg font-semibold text-indigo-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">🔄</span>{notes.process_flow.title}</h3>
+                      <h3 className="text-lg font-semibold text-indigo-400 flex items-center gap-2"><span className="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center text-sm">🔄</span>{notes.process_flow?.title || "Process Flow"}</h3>
                       <svg className={`w-5 h-5 chevron-icon text-slate-500 group-hover:text-slate-300 ${isSectionCollapsed("processflow") ? "" : "rotated"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                     </button>
                     <div className={`section-body ${isSectionCollapsed("processflow") ? "collapsed" : "expanded"}`}>
-                      <div className="space-y-3 pt-2">{notes.process_flow.steps.map((step, i) => (
+                      <div className="space-y-3 pt-2">{notes.process_flow?.steps?.map((step, i) => (
                         <div key={i} className="flex gap-4">
                           <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 font-bold text-sm">{step.step}</div>
                           <div className="flex-1 pb-3 border-b border-white/5"><p className="text-white font-medium text-sm">{step.title}</p><p className="text-slate-400 text-sm mt-0.5">{step.description}</p></div>
@@ -790,11 +790,11 @@ export default function Home() {
 
             {/* Bottom CTA */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-6 pb-10 no-print animate-fadeInUp">
-              <button onClick={handleDownloadWord} disabled={downloading} className="btn-gradient px-10 py-4 text-white font-semibold rounded-2xl shadow-xl shadow-indigo-500/20 text-lg inline-flex items-center gap-2.5 disabled:shadow-none">
+              <button onClick={handleDownloadWord} disabled={downloading} className="btn-gradient w-full sm:w-auto px-8 sm:px-10 py-3.5 sm:py-4 text-white font-semibold rounded-2xl shadow-xl shadow-indigo-500/20 text-base sm:text-lg inline-flex items-center justify-center gap-2.5 disabled:shadow-none">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                {downloading ? "Preparing..." : "Download Word Document"}
+                {downloading ? "Preparing..." : "Download Word"}
               </button>
-              <button onClick={handleNewNotes} className="glass px-8 py-4 text-slate-300 font-medium rounded-2xl inline-flex items-center gap-2.5 hover:bg-white/10 transition active:scale-95">
+              <button onClick={handleNewNotes} className="glass w-full sm:w-auto px-8 py-3.5 sm:py-4 text-slate-300 font-medium rounded-2xl inline-flex items-center justify-center gap-2.5 hover:bg-white/10 transition active:scale-95">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 New Notes
               </button>

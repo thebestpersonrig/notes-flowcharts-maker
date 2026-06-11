@@ -161,12 +161,12 @@ export default function QuizGenerator() {
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <button onClick={() => { resetQuiz(); generateQuiz(); }}
-                className="btn-gradient px-6 py-3 text-white font-semibold rounded-xl inline-flex items-center gap-2 active:scale-95 shadow-lg shadow-indigo-500/20">
+                className="btn-gradient w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl inline-flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-indigo-500/20">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
                 Retry Same Topic
               </button>
               <button onClick={newQuiz}
-                className="glass px-6 py-3 text-slate-300 font-medium rounded-xl inline-flex items-center gap-2 hover:bg-white/10 transition active:scale-95">
+                className="glass w-full sm:w-auto px-6 py-3 text-slate-300 font-medium rounded-xl inline-flex items-center justify-center gap-2 hover:bg-white/10 transition active:scale-95">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
                 New Topic
               </button>
@@ -348,7 +348,7 @@ export default function QuizGenerator() {
                   </div>
 
                   {/* Options */}
-                  <div className="space-y-2 ml-11">
+                  <div className="space-y-2 ml-0 sm:ml-11">
                     {q.options.map((opt, oi) => {
                       const isSelected = userAnswer === oi;
                       const isRight = q.correct === oi;
@@ -385,7 +385,7 @@ export default function QuizGenerator() {
 
                   {/* Explanation — shown after submit */}
                   {submitted && isAnswered && (
-                    <div className={`ml-11 mt-3 px-4 py-3 rounded-xl text-xs leading-relaxed ${
+                    <div className={`ml-0 sm:ml-11 mt-3 px-4 py-3 rounded-xl text-xs leading-relaxed ${
                       isCorrect ? "bg-emerald-500/5 text-emerald-300/80" : "bg-rose-500/5 text-rose-300/80"
                     }`}>
                       {q.explanation}
@@ -401,7 +401,7 @@ export default function QuizGenerator() {
                 <button
                   onClick={submitQuiz}
                   disabled={!allAnswered}
-                  className="btn-gradient px-10 py-4 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 inline-flex items-center gap-2.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-base"
+                  className="btn-gradient w-full sm:w-auto px-10 py-4 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/20 inline-flex items-center justify-center gap-2.5 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-base"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                   Submit Quiz{!allAnswered ? ` (${Object.keys(answers).length}/${questions.length})` : ""}

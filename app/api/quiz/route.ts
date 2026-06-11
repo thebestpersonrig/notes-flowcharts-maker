@@ -1,6 +1,13 @@
 import OpenAI from "openai";
 import { NextRequest, NextResponse } from "next/server";
 
+const MODELS = [
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "openai/gpt-oss-120b:free",
+  "google/gemma-4-31b-it:free",
+];
+
 const DIFFICULTY_PROMPTS: Record<string, string> = {
   easy: `DIFFICULTY: EASY
 - Questions should test basic recall and definitions
@@ -49,11 +56,12 @@ export async function POST(req: NextRequest) {
 
     if (notes?.title) {
       // Generate from notes (existing flow)
+      const keyTerms = notes.key_terms?.length
+        ? `\n\nKey terms: ${notes.key_terms.map((t: { term: string; definition: string }) => `${t.term}: ${t.definition}`).join("; ")}`
+        : "";
       const summary = `Topic: ${notes.title}\n\nKey sections: ${notes.sections
         .map((s: { title: string }) => s.title)
-        .join(", ")}\n\nKey terms: ${notes.key_terms
-        .map((t: { term: string; definition: string }) => `${t.term}: ${t.definition}`)
-        .join("; ")}\n\nSummary: ${notes.summary}`;
+        .join(", ")}${keyTerms}\n\nSummary: ${notes.summary || ""}`;
 
       prompt = `Based on these study notes, generate exactly ${numQuestions} multiple-choice quiz questions.
 
@@ -90,16 +98,29 @@ Rules:
 - CRITICAL — Explanations must explain WHY the correct answer is right AND briefly explain why EACH wrong answer is wrong. Format: "Correct: [A] because [reason]. B is wrong because [reason]. C is wrong because [reason]. D is wrong because [reason]."
 - Write questions that a student might actually see on an exam — not obscure trivia`;
 
-    const message = await client.chat.completions.create({
-      model: "google/gemma-4-31b-it:free",
-      max_tokens: 3000,
-      messages: [{ role: "user", content: prompt }],
-    });
+    let raw = "";
+    let lastErr = "";
+    for (const model of MODELS) {
+      try {
+        const message = await client.chat.completions.create({
+          model,
+          max_tokens: 3000,
+          messages: [{ role: "user", content: prompt }],
+        }, { timeout: 60_000 });
+        const content = message.choices[0]?.message?.content?.trim();
+        if (content) { raw = content; break; }
+        lastErr = `${model} returned empty`;
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+      }
+    }
 
-    const raw = message.choices[0]?.message?.content ?? "";
-
-    if (!raw.trim()) {
-      return NextResponse.json({ error: "The AI returned an empty response. Please try again." }, { status: 500 });
+    if (!raw) {
+      const lower = lastErr.toLowerCase();
+      if (lower.includes("429") || lower.includes("rate")) {
+        return NextResponse.json({ error: "Rate limited — wait a minute and try again." }, { status: 429 });
+      }
+      return NextResponse.json({ error: lastErr || "All models failed. Please try again." }, { status: 502 });
     }
 
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();

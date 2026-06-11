@@ -56,7 +56,7 @@ export default function Home() {
         </div>
 
         {/* Tool Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 w-full max-w-4xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 w-full max-w-4xl animate-fadeInUp" style={{ animationDelay: "150ms" }}>
 
           {/* Notes Card */}
           <Link href="/notes" className="group glass rounded-2xl p-6 sm:p-8 hover:glow-sm transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] border border-white/10 hover:border-indigo-500/30">

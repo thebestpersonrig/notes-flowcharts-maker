@@ -5,8 +5,9 @@ import { z } from "zod";
 // ─── Model fallback chain ────────────────────────────────────────────────────
 
 const MODELS = [
-  "deepseek/deepseek-chat:free",
-  "qwen/qwen3-32b:free",
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
+  "nousresearch/hermes-3-llama-3.1-405b:free",
+  "openai/gpt-oss-120b:free",
   "google/gemma-4-31b-it:free",
 ];
 
@@ -18,20 +19,76 @@ const NotesSchema = z.object({
   sections: z.array(
     z.object({
       title: z.string(),
-      tldr: z.string(),
-      difficulty: z.string(),
-      content: z.string(),
-      key_points: z.array(z.string()),
-      examples: z.array(z.string()),
-      connections: z.string(),
+      tldr: z.string().default(""),
+      difficulty: z.string().default("intermediate"),
+      content: z.string().default(""),
+      key_points: z.array(z.string()).default([]),
+      examples: z.array(z.string()).default([]),
+      connections: z.string().default(""),
       subsections: z.array(
         z.object({
           title: z.string(),
           content: z.string(),
         })
-      ),
+      ).default([]),
     })
   ),
+  common_misconceptions: z.array(
+    z.object({
+      misconception: z.string(),
+      reality: z.string(),
+    })
+  ).default([]),
+  analogies: z.array(
+    z.object({
+      concept: z.string(),
+      analogy: z.string(),
+      explanation: z.string(),
+    })
+  ).default([]),
+  pros_cons: z.object({
+    applicable: z.boolean().default(false),
+    context: z.string().default(""),
+    pros: z.array(z.string()).default([]),
+    cons: z.array(z.string()).default([]),
+  }).default({ applicable: false, context: "", pros: [], cons: [] }),
+  timeline: z.object({
+    applicable: z.boolean().default(false),
+    events: z.array(
+      z.object({
+        year: z.string(),
+        event: z.string(),
+        significance: z.string(),
+      })
+    ).default([]),
+  }).default({ applicable: false, events: [] }),
+  process_flow: z.object({
+    applicable: z.boolean().default(false),
+    title: z.string().default(""),
+    steps: z.array(
+      z.object({
+        step: z.number(),
+        title: z.string(),
+        description: z.string(),
+      })
+    ).default([]),
+  }).default({ applicable: false, title: "", steps: [] }),
+  mermaid_diagram: z.string().default(""),
+  practice_problems: z.array(
+    z.object({
+      problem: z.string(),
+      hint: z.string(),
+      answer: z.string(),
+    })
+  ).default([]),
+  key_terms: z.array(
+    z.object({
+      term: z.string(),
+      definition: z.string(),
+    })
+  ).default([]),
+  summary: z.string().default(""),
+  further_reading: z.array(z.string()).default([]),
 });
 
 // ─── JSON safety helpers ─────────────────────────────────────────────────────
@@ -64,7 +121,7 @@ async function callModel(client: any, messages: any, max_tokens: number) {
         model,
         messages,
         max_tokens,
-      });
+      }, { timeout: 60_000 });
 
       const text = res.choices[0]?.message?.content;
       if (text) return text;
@@ -74,7 +131,7 @@ async function callModel(client: any, messages: any, max_tokens: number) {
     }
   }
 
-  throw lastError;
+  throw lastError ?? new Error("All models failed");
 }
 
 // ─── Retry + validation loop (CORE BRAIN) ────────────────────────────────────
@@ -106,6 +163,8 @@ async function safeGenerate(client: any, messages: any, max_tokens: number, retr
       if (i === retries) throw err;
     }
   }
+
+  throw new Error("All retries exhausted");
 }
 
 const TEMPLATE_PROMPTS: Record<string, { system: string; maxTokens: number }> =
@@ -276,49 +335,148 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (file && typeof file.base64 === "string" && file.base64.length > 3_000_000) {
+      return NextResponse.json({ error: "File too large. Max 2MB." }, { status: 400 });
+    }
+
     const tmpl = TEMPLATE_PROMPTS[template] || TEMPLATE_PROMPTS.study;
 
-    const LENGTH_SCALE: Record<string, any> = {
-      short: { multiplier: 0.5, instruction: "SHORT" },
-      medium: { multiplier: 1, instruction: "MEDIUM" },
-      detailed: { multiplier: 1.4, instruction: "DETAILED" },
+    const LENGTH_SCALE: Record<string, { multiplier: number; instruction: string }> = {
+      short: {
+        multiplier: 0.5,
+        instruction: `LENGTH: SHORT — Be concise. 2-3 sections max. Keep explanations brief (1-2 paragraphs each). Fewer examples, fewer key terms (5-8). Get to the point fast. No filler.`,
+      },
+      medium: {
+        multiplier: 1,
+        instruction: `LENGTH: MEDIUM — Standard depth. 3-5 sections. Balanced explanations with enough detail to understand fully.`,
+      },
+      detailed: {
+        multiplier: 1.4,
+        instruction: `LENGTH: DETAILED — Go deep. 5-7+ sections with subsections. Thorough explanations, multiple examples per section, extensive key terms (12-20). Cover edge cases, nuances, and connections. Leave nothing out.`,
+      },
     };
 
     const lengthConfig = LENGTH_SCALE[length] || LENGTH_SCALE.medium;
+    const finalMaxTokens = Math.round(tmpl.maxTokens * lengthConfig.multiplier);
 
-    const finalMaxTokens = Math.round(
-      tmpl.maxTokens * lengthConfig.multiplier
-    );
+    let gradeInstruction = "";
+    if (grade) {
+      const gradeLabel = grade === "college" ? "college/university" : `grade ${grade}`;
+      gradeInstruction = `
+CRITICAL — GRADE ADAPTATION:
+The student is in ${gradeLabel}. You MUST adapt ALL content to their level:
+- Vocabulary, sentence complexity, and conceptual depth must match a ${gradeLabel} student
+- If this topic is above their level, build up from fundamentals they already know
+- Analogies should reference things a ${gradeLabel} student relates to
+- Practice problems must be solvable at their level`;
+    }
 
-    const gradeInstruction = grade ? `Grade level: ${grade}` : "";
-    const compareInstruction = compare ? "COMPARE MODE enabled." : "";
+    const compareInstruction = compare ? `
+COMPARE MODE: The topic contains "vs" — the user wants a COMPARISON.
+- Structure sections around DIFFERENCES and SIMILARITIES between the two subjects
+- Use a dedicated section for "Key Differences" and "Key Similarities"
+- pros_cons MUST be applicable — pros/cons of each subject relative to the other
+- Practice problems should ask students to distinguish between the two` : "";
 
     let fileContext = "";
     const isImage = file?.mime?.startsWith("image/");
-
     if (file && !isImage) {
       try {
-        fileContext = Buffer.from(file.base64, "base64")
-          .toString("utf-8")
-          .slice(0, 15000);
-      } catch {}
+        const text = Buffer.from(file.base64, "base64").toString("utf-8").slice(0, 15_000);
+        fileContext = `\n\nATTACHED FILE ("${file.name}"):\n---\n${text}\n---\nUse this file's content as source material. Extract key information and incorporate it into the notes.\n`;
+      } catch { /* ignore decode errors */ }
     }
+    const imageInstruction = isImage
+      ? "\n\nThe user has attached an image (shown below). Carefully analyze everything visible in the image — text, diagrams, equations, handwriting, charts — and use it as primary source material for generating the notes.\n"
+      : "";
 
     const prompt = `${tmpl.system}
 
 ${lengthConfig.instruction}
 
-TOPIC: "${topic}"
-${fileContext}
+TOPIC: "${topic}"${imageInstruction}${fileContext}${compareInstruction}
 ${gradeInstruction}
-${compareInstruction}
 
-Return ONLY valid JSON:
-{ ... schema ... }
+Return ONLY valid JSON (no markdown, no code fences, no text before or after the JSON):
+{
+  "title": "A compelling, descriptive title for these notes",
+  "overview": "2-3 paragraphs introducing the topic. MUST open with a surprising fact, counter-intuitive statement, or vivid scenario — NOT a dry 'X is a...' definition. Hook the reader like a great article would. Then explain why this topic matters and what they'll learn.",
+  "sections": [
+    {
+      "title": "Section Title",
+      "tldr": "One crisp sentence summarizing this section's key takeaway",
+      "difficulty": "beginner | intermediate | advanced",
+      "content": "A thorough, well-written paragraph (or two) explaining the core idea. Be specific. Use concrete details, not vague generalities.",
+      "key_points": ["Each point should be a complete, useful thought — not a fragment", "Include enough detail to be useful on its own", "3-5 points per section"],
+      "examples": ["MUST include a real-world example with a NAMED company/person/event and a SPECIFIC number or date — e.g. 'In 2020, Tesla produced 509,737 vehicles using...' NOT 'for example, some companies use this'"],
+      "connections": "How this connects to other sections, related concepts, or the bigger picture",
+      "subsections": [{"title": "Subtopic", "content": "Detailed explanation"}]
+    }
+  ],
+  "common_misconceptions": [
+    {"misconception": "State what people commonly get wrong", "reality": "Explain the truth clearly and why the misconception exists"}
+  ],
+  "analogies": [
+    {"concept": "The technical concept", "analogy": "A vivid everyday comparison", "explanation": "Why this analogy captures the essence of the concept"}
+  ],
+  "pros_cons": {
+    "applicable": false,
+    "context": "What's being evaluated (only if the topic involves genuine tradeoffs)",
+    "pros": ["Specific advantage with explanation"],
+    "cons": ["Specific disadvantage with explanation"]
+  },
+  "timeline": {
+    "applicable": false,
+    "events": [{"year": "Year", "event": "What happened", "significance": "Why it matters to this topic"}]
+  },
+  "process_flow": {
+    "applicable": false,
+    "title": "How [Process] Works",
+    "steps": [{"step": 1, "title": "Step name", "description": "What happens and why it matters"}]
+  },
+  "mermaid_diagram": "graph TD\\n    A[Start] --> B{Decision}\\n    B -->|Yes| C[Result 1]\\n    B -->|No| D[Result 2]",
+  "practice_problems": [
+    {"problem": "A thoughtful question that tests genuine understanding", "hint": "A useful nudge toward the answer", "answer": "A complete, well-explained answer"}
+  ],
+  "key_terms": [
+    {"term": "Term", "definition": "A clear, complete definition — not just 2 words"}
+  ],
+  "summary": "A satisfying wrap-up that ties everything together and reinforces the most important ideas",
+  "further_reading": ["Specific book/resource/topic title for further learning"]
+}
+
+OUTPUT RULES:
+- pros_cons.applicable = true ONLY if the topic genuinely involves choices or tradeoffs. False for pure knowledge topics.
+- timeline.applicable = true if the topic has ANY historical development, key dates, or evolution over time. Most topics do — lean toward true.
+- process_flow.applicable = true if you can describe the topic as a sequence of steps, stages, phases, or a cycle. LEAN TOWARD TRUE.
+- mermaid_diagram: ALWAYS generate a valid Mermaid.js flowchart string. Use decision diamonds, branching paths, parallel processes. Aim for 8-15 nodes minimum. Use \\n for newlines. Escape double quotes with single quotes. Do NOT use parentheses, brackets, or special chars inside node labels except the Mermaid shape delimiters.
+- 3-5 common_misconceptions — things students ACTUALLY confuse or get wrong on tests.
+- 3-5 analogies — each MUST compare to something a teenager would encounter daily.
+- 3-5 practice_problems — mix of difficulty: 1 recall, 2 application, 1-2 analysis.
+- 8-15 key_terms with COMPLETE definitions (at least 10 words each).
+- EVERY example MUST name a real company, person, place, event, or study with a specific number/date/fact.
+- overview MUST start with a hook — NEVER start with "[Topic] is a..." or "[Topic] refers to..."
+- All content must be factually accurate
+- If a grade level is specified, EVERY piece of content must be appropriate for that level
 
 ABSOLUTE RULE: Return ONLY valid JSON.`;
 
-    const messages = [{ role: "user", content: prompt }];
+    type TextPart = { type: "text"; text: string };
+    type ImagePart = { type: "image_url"; image_url: { url: string } };
+    type ContentPart = TextPart | ImagePart;
+
+    let messages: { role: "user"; content: string | ContentPart[] }[];
+    if (isImage && file) {
+      messages = [{
+        role: "user",
+        content: [
+          { type: "text", text: prompt },
+          { type: "image_url", image_url: { url: `data:${file.mime};base64,${file.base64}` } },
+        ],
+      }];
+    } else {
+      messages = [{ role: "user", content: prompt }];
+    }
 
     const result = await safeGenerate(client, messages, finalMaxTokens);
 

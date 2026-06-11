@@ -238,20 +238,20 @@ export default function QuizMode({ notes }: { notes: NotesData }) {
       ))}
 
       {/* Actions */}
-      <div className="flex justify-center gap-3 pt-2">
+      <div className="flex flex-col sm:flex-row justify-center gap-3 pt-2">
         {!showResults ? (
           <button onClick={handleSubmit} disabled={!allAnswered}
-            className="btn-gradient px-6 py-3 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 disabled:shadow-none transition">
+            className="btn-gradient w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 disabled:shadow-none transition text-center">
             {allAnswered ? "Check Answers" : `Answer all ${questions.length} questions`}
           </button>
         ) : (
-          <div className="flex gap-3">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
             <button onClick={generateQuiz} disabled={loading}
-              className="btn-gradient px-6 py-3 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 disabled:shadow-none">
+              className="btn-gradient w-full sm:w-auto px-6 py-3 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 disabled:shadow-none text-center">
               {loading ? "Generating..." : "New Quiz"}
             </button>
             <button onClick={handleReset}
-              className="glass px-6 py-3 text-slate-300 font-medium rounded-xl hover:bg-white/10 transition">
+              className="glass w-full sm:w-auto px-6 py-3 text-slate-300 font-medium rounded-xl hover:bg-white/10 transition text-center">
               Change Settings
             </button>
           </div>

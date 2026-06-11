@@ -317,3 +317,17 @@ button:has(+ .section-body):hover { background: rgba(255, 255, 255, 0.03); }
 .katex-block .katex-display > .katex {
   white-space: normal; /* allow long results to wrap instead of overflowing */
 }
+
+/* ─── Mobile optimizations ────────────────────── */
+@media (max-width: 639px) {
+  .mesh-bg::before { width: 300px; height: 300px; }
+  .mesh-bg::after { width: 250px; height: 250px; }
+  .orb-3 { width: 200px; height: 200px; }
+}
+
+/* Safe area for notched phones */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
