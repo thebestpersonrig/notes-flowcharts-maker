@@ -16,9 +16,9 @@ export async function POST(req: NextRequest) {
     }
 
     const visionModels = [
-      "meta-llama/llama-4-maverick:free",
+      "google/gemini-2.5-flash-preview-05-20:free",
       "google/gemma-4-31b-it:free",
-      "meta-llama/llama-4-scout:free",
+      "qwen/qwen2.5-vl-72b-instruct:free",
     ];
 
     const messages = [
